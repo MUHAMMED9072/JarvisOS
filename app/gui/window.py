@@ -1,6 +1,7 @@
 import customtkinter as ctk
 
 from .theme import *
+from app.utils.system import *
 
 
 class JarvisWindow(ctk.CTk):
@@ -15,21 +16,27 @@ class JarvisWindow(ctk.CTk):
 
         self.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}")
 
+        self.minsize(1200, 700)
+
         self.configure(
             fg_color=COLORS["background"]
         )
 
-        self.build_ui()
+        self.build_sidebar()
 
-    def build_ui(self):
+        self.build_main()
 
-        # ==========================
-        # Sidebar
-        # ==========================
+        self.update_dashboard()
+
+    # =====================================
+    # SIDEBAR
+    # =====================================
+
+    def build_sidebar(self):
 
         self.sidebar = ctk.CTkFrame(
             self,
-            width=SIDEBAR_WIDTH,
+            width=240,
             corner_radius=0,
             fg_color=COLORS["sidebar"]
         )
@@ -39,89 +46,89 @@ class JarvisWindow(ctk.CTk):
             fill="y"
         )
 
-        # ==========================
-        # Main Content
-        # ==========================
-
-        self.content = ctk.CTkFrame(
-            self,
-            fg_color=COLORS["background"]
-        )
-
-        self.content.pack(
-            side="right",
-            fill="both",
-            expand=True
-        )
-
-        # ==========================
-        # Sidebar Title
-        # ==========================
-
-        title = ctk.CTkLabel(
+        self.logo = ctk.CTkLabel(
             self.sidebar,
             text="🤖 JARVIS",
-            font=("Segoe UI", 28, "bold"),
+            font=("Segoe UI", 30, "bold"),
             text_color=COLORS["accent"]
         )
 
-        title.pack(
-            pady=(30, 20)
+        self.logo.pack(
+            pady=(35, 25)
         )
 
-        # ==========================
-        # Sidebar Menu
-        # ==========================
-
-        menu_items = [
+        menu = [
             "🏠 Dashboard",
             "💬 Chat",
             "🎤 Voice",
-            "⚡ Skills",
             "🧠 Memory",
+            "⚡ Skills",
             "🤖 AI",
             "⚙ Settings",
             "📜 Logs"
         ]
 
-        for item in menu_items:
+        for item in menu:
 
-            btn = ctk.CTkButton(
+            button = ctk.CTkButton(
                 self.sidebar,
                 text=item,
-                height=45,
                 anchor="w",
+                height=42,
                 corner_radius=8
             )
 
-            btn.pack(
+            button.pack(
                 fill="x",
                 padx=15,
                 pady=5
             )
 
-        # ==========================
-        # Welcome Section
-        # ==========================
+    # =====================================
+    # MAIN AREA
+    # =====================================
 
-        header = ctk.CTkLabel(
-            self.content,
+    def build_main(self):
+
+        self.main = ctk.CTkFrame(
+            self,
+            fg_color=COLORS["background"]
+        )
+
+        self.main.pack(
+            side="right",
+            fill="both",
+            expand=True
+        )
+
+        self.header()
+
+        self.dashboard()
+
+    # =====================================
+    # HEADER
+    # =====================================
+
+    def header(self):
+
+        title = ctk.CTkLabel(
+            self.main,
             text="Welcome to JARVIS OS",
-            font=("Segoe UI", 30, "bold"),
+            font=("Segoe UI", 32, "bold"),
             text_color="white"
         )
 
-        header.pack(
+        title.pack(
             anchor="nw",
             padx=40,
-            pady=(35, 10)
+            pady=(30, 5)
         )
 
         subtitle = ctk.CTkLabel(
-            self.content,
+            self.main,
             text="Your personal AI operating system",
             font=("Segoe UI", 16),
-            text_color="#A0AEC0"
+            text_color="#94A3B8"
         )
 
         subtitle.pack(
@@ -129,59 +136,89 @@ class JarvisWindow(ctk.CTk):
             padx=40
         )
 
-        # ==========================
-        # Dashboard Card
-        # ==========================
+    # =====================================
+    # DASHBOARD
+    # =====================================
 
-        dashboard = ctk.CTkFrame(
-            self.content,
+    def dashboard(self):
+
+        self.card = ctk.CTkFrame(
+            self.main,
             width=900,
-            height=240,
+            height=320,
             corner_radius=15,
             fg_color=COLORS["card"]
         )
 
-        dashboard.pack(
+        self.card.pack(
             anchor="nw",
             padx=40,
             pady=30
         )
 
-        dashboard.pack_propagate(False)
+        self.card.pack_propagate(False)
 
-        # Dashboard Title
-
-        dashboard_title = ctk.CTkLabel(
-            dashboard,
-            text="System Status",
-            font=("Segoe UI", 22, "bold"),
+        title = ctk.CTkLabel(
+            self.card,
+            text="System Monitor",
+            font=("Segoe UI",24,"bold"),
             text_color="white"
         )
 
-        dashboard_title.pack(
+        title.pack(
             anchor="nw",
             padx=20,
-            pady=(20, 10)
+            pady=(20,10)
         )
 
-        # Status Information
-
-        status = ctk.CTkLabel(
-            dashboard,
-            text="""
-CPU Usage      : Loading...
-RAM Usage      : Loading...
-Ollama Status  : Online
-Voice Engine   : Ready
-Internet       : Connected
-Time           : Loading...
-""",
+        self.status = ctk.CTkLabel(
+            self.card,
             justify="left",
-            font=("Consolas", 16),
-            text_color=COLORS["text"]
+            font=("Consolas",17),
+            text_color="white"
         )
 
-        status.pack(
+        self.status.pack(
             anchor="nw",
             padx=20
+        )
+    # =====================================
+    # LIVE DASHBOARD
+    # =====================================
+
+    def update_dashboard(self):
+
+        try:
+
+            cpu = cpu_usage()
+            ram = ram_usage()
+            disk = disk_usage()
+            internet = internet_status()
+            os_name = operating_system()
+            py = python_version()
+            clock = current_time()
+
+            self.status.configure(
+               text=(
+    f"CPU Usage      : {cpu}\n\n"
+    f"RAM Usage      : {ram}\n\n"
+    f"Disk Usage     : {disk}\n\n"
+    f"Internet       : {internet}\n\n"
+    f"Operating Sys  : {os_name}\n\n"
+    f"Python Version : {py}\n\n"
+    f"Time           : {clock}\n\n"
+    f"Ollama Status  : Online\n\n"
+    f"Voice Engine   : Ready"
+)
+            )
+
+        except Exception as e:
+
+            self.status.configure(
+                text=f"Dashboard Error:\n\n{e}"
+            )
+
+        self.after(
+            1000,
+            self.update_dashboard
         )
