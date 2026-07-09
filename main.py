@@ -1,10 +1,11 @@
-from app.core.app import JarvisApp
+from app.core.kernel import JarvisKernel
 
 
 def main():
-    app = JarvisApp()
-    app.run()
+    kernel = JarvisKernel()
+    kernel.boot()
 
 
 if __name__ == "__main__":
     main()
+    

@@ -3,4 +3,4 @@ ttkbootstrap
 python-dotenv
 rich
 psutil
-44
+psutil>=7.0.0
