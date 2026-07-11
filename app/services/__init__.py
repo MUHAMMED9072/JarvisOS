@@ -1,4 +1,4 @@
-from .registry import ServiceRegistry
+from ..core.registry import ServiceRegistry
 from .logger import setup_logger
 
 registry = ServiceRegistry()
