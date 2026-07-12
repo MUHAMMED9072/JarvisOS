@@ -1,60 +1,63 @@
+from __future__ import annotations
+
 import json
 from pathlib import Path
 
-from .models import MemoryItem
-
 
 class MemoryStorage:
-    """
-    Handles persistent memory storage using JSON.
-    """
 
-    def __init__(self, filepath: str = "data/memory.json"):
-        self.filepath = Path(filepath)
+    def __init__(self, filename: str):
 
-        self.filepath.parent.mkdir(parents=True, exist_ok=True)
+        self.path = Path("data") / "memory" / filename
 
-        if not self.filepath.exists():
-            self.clear()
+        self.path.parent.mkdir(parents=True, exist_ok=True)
 
-    def load(self) -> list[dict]:
-        """
-        Load all stored memories.
-        """
+        if not self.path.exists():
+            self.save({})
+
+    def load(self) -> dict:
 
         try:
-            with self.filepath.open("r", encoding="utf-8") as file:
-                return json.load(file)
 
-        except (json.JSONDecodeError, FileNotFoundError):
-            self.clear()
-            return []
+            with open(self.path, "r", encoding="utf-8") as f:
+                return json.load(f)
 
-    def save_all(self, memories: list[dict]) -> None:
-        """
-        Save the complete memory list.
-        """
+        except Exception:
+            return {}
 
-        with self.filepath.open("w", encoding="utf-8") as file:
+    def save(self, data: dict):
+
+        with open(self.path, "w", encoding="utf-8") as f:
+
             json.dump(
-                memories,
-                file,
+                data,
+                f,
                 indent=4,
                 ensure_ascii=False,
             )
 
-    def save_item(self, item: MemoryItem) -> None:
-        """
-        Append one memory item.
-        """
+    def get(self, key, default=None):
 
-        memories = self.load()
-        memories.append(item.to_dict())
-        self.save_all(memories)
+        return self.load().get(key, default)
 
-    def clear(self) -> None:
-        """
-        Clear all stored memories.
-        """
+    def set(self, key, value):
 
-        self.save_all([])
+        data = self.load()
+
+        data[key] = value
+
+        self.save(data)
+
+    def delete(self, key):
+
+        data = self.load()
+
+        if key in data:
+
+            del data[key]
+
+            self.save(data)
+
+    def clear(self):
+
+        self.save({})

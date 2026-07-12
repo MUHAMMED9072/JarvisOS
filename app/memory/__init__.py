@@ -1,5 +1,19 @@
+"""
+JARVIS Memory Engine
+
+Persistent memory subsystem.
+
+Modules:
+- storage
+- session
+- history
+- projects
+- preferences
+- knowledge
+- search
+- context
+"""
+
 from .manager import MemoryManager
-from .models import MemoryItem
-from .storage import MemoryStorage
-from .session import SessionMemory
-from .history import MemoryHistory
+
+__all__ = ["MemoryManager"]

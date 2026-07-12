@@ -1,32 +1,34 @@
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 
-@dataclass(slots=True)
-class MemoryItem:
-    """
-    Represents a single memory entry.
-    """
+def utc_now() -> str:
+    return datetime.utcnow().isoformat()
 
-    timestamp: str
-    role: str
-    content: str
-    metadata: dict[str, Any] = field(default_factory=dict)
+
+@dataclass
+class MemoryRecord:
+    key: str
+    value: Any
+    created: str = field(default_factory=utc_now)
+    updated: str = field(default_factory=utc_now)
+
+    def to_dict(self) -> dict:
+        return {
+            "key": self.key,
+            "value": self.value,
+            "created": self.created,
+            "updated": self.updated,
+        }
 
     @classmethod
-    def create(
-        cls,
-        role: str,
-        content: str,
-        metadata: dict[str, Any] | None = None,
-    ) -> "MemoryItem":
+    def from_dict(cls, data: dict):
         return cls(
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            role=role,
-            content=content,
-            metadata=metadata or {},
+            key=data["key"],
+            value=data["value"],
+            created=data.get("created", utc_now()),
+            updated=data.get("updated", utc_now()),
         )
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
