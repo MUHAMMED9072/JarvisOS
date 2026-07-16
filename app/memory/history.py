@@ -13,11 +13,11 @@ class MemoryHistory:
 
     def get_all(self) -> list[dict[str, Any]]:
         """Return all stored memories."""
-        return self.storage.load()
+        return self.storage.get("items", [])
 
     def get_recent(self, limit: int = 10) -> list[dict[str, Any]]:
         """Return the most recent memories."""
-        return self.storage.load()[-limit:]
+        return self.storage.get("items", [])[-limit:]
 
     def search(self, query: str) -> list[dict[str, Any]]:
         """
@@ -27,13 +27,13 @@ class MemoryHistory:
 
         return [
             memory
-            for memory in self.storage.load()
+            for memory in self.storage.get("items", [])
             if query in memory.get("content", "").lower()
         ]
 
     def last_user_message(self) -> dict[str, Any] | None:
         """Return the last user message."""
-        memories = self.storage.load()
+        memories = self.storage.get("items", [])
 
         for memory in reversed(memories):
             if memory.get("role") == "user":
@@ -43,7 +43,7 @@ class MemoryHistory:
 
     def last_assistant_message(self) -> dict[str, Any] | None:
         """Return the last assistant message."""
-        memories = self.storage.load()
+        memories = self.storage.get("items", [])
 
         for memory in reversed(memories):
             if memory.get("role") == "assistant":
