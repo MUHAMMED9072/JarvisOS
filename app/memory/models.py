@@ -32,3 +32,37 @@ class MemoryRecord:
             created=data.get("created", utc_now()),
             updated=data.get("updated", utc_now()),
         )
+
+
+@dataclass
+class MemoryItem:
+    role: str
+    content: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+    timestamp: str = field(default_factory=utc_now)
+
+    def to_dict(self) -> dict:
+        return {
+            "role": self.role,
+            "content": self.content,
+            "metadata": self.metadata,
+            "timestamp": self.timestamp,
+        }
+
+    @classmethod
+    def create(
+        cls,
+        role: str,
+        content: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> MemoryItem:
+        return cls(role=role, content=content, metadata=metadata or {})
+
+    @classmethod
+    def from_dict(cls, data: dict) -> MemoryItem:
+        return cls(
+            role=data["role"],
+            content=data["content"],
+            metadata=data.get("metadata", {}),
+            timestamp=data.get("timestamp", utc_now()),
+        )

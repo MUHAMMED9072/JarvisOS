@@ -11,8 +11,8 @@ class MemoryManager:
     Main interface for the JARVIS Memory Engine.
     """
 
-    def __init__(self):
-        self.storage = MemoryStorage()
+    def __init__(self) -> None:
+        self.storage = MemoryStorage("history.json")
         self.session = SessionMemory()
         self.history = MemoryHistory(self.storage)
 
@@ -29,7 +29,10 @@ class MemoryManager:
             metadata=metadata,
         )
 
-        self.storage.save_item(item)
+        items = self.storage.get("items", [])
+        items.append(item.to_dict())
+        self.storage.set("items", items)
+
         self.session.add_message(role, content)
 
     def set_context(
