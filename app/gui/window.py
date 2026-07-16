@@ -1,13 +1,16 @@
 import customtkinter as ctk
 
 from .theme import *
+from app.core.registry import ServiceRegistry
 from app.utils.system import *
 
 
 class JarvisWindow(ctk.CTk):
 
-    def __init__(self):
+    def __init__(self, registry: ServiceRegistry):
         super().__init__()
+
+        self.registry = registry
 
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
