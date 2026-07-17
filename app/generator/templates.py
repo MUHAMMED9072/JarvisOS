@@ -1,7 +1,13 @@
-﻿SKILL_TEMPLATE = """
-class {class_name}:
-    name = "{skill_name}"
+﻿SKILL_TEMPLATE = '''from app.skills.base import Skill
+from app.skills.result import SkillResult
 
-    def run(self, **kwargs):
-        return {body}
-"""
+
+class {class_name}(Skill):
+    name = "{skill_name}"
+    intent = "{intent}"
+    version = "1.0.0"
+    description = "{description}"
+
+    def run(self, request) -> SkillResult:
+        return SkillResult.ok(message={body})
+'''
