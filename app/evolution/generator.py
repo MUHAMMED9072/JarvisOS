@@ -1,47 +1,37 @@
-"""
-JARVIS Evolution Engine - Code Generator
-"""
-
-from __future__ import annotations
-
-from dataclasses import dataclass
 from pathlib import Path
-from datetime import datetime
-
-
-@dataclass
-class GeneratedFile:
-    path: str
-    created: str
-    size: int
-
+from app.ai.manager import AIManager
+from .context_builder import ContextBuilder
 
 class CodeGenerator:
-    """Writes generated source code to disk."""
 
-    def generate(self, output_path: str, source: str) -> GeneratedFile:
-        path = Path(output_path)
-        path.parent.mkdir(parents=True, exist_ok=True)
+    def generate_task(self, task:str, target_file:str, output="data/generated_patch.py"):
+        tree = ContextBuilder().build().read_text(encoding="utf-8")
+        source = Path(target_file).read_text(encoding="utf-8")
 
-        path.write_text(source, encoding="utf-8")
+        prompt=f"""
+You are editing an EXISTING JARVIS OS project.
 
-        return GeneratedFile(
-            path=str(path),
-            created=datetime.now().isoformat(timespec="seconds"),
-            size=path.stat().st_size,
-        )
+{tree}
 
-    def exists(self, output_path: str) -> bool:
-        return Path(output_path).exists()
+TARGET FILE:
+{target_file}
 
+RULES:
+- Never invent files or modules.
+- Only reference paths from PROJECT TREE.
+- Preserve class names and public methods.
+- Return ONLY the complete replacement Python file.
 
-if __name__ == "__main__":
-    generator = CodeGenerator()
+TASK:
+{task}
 
-    sample = """def hello():
-    return 'Hello from JARVIS'
+CURRENT FILE:
+
+```python
+{source}
+```
 """
-
-    result = generator.generate("generated/sample.py", sample)
-
-    print(result)
+        print("[AI] Building project-aware patch...")
+        code = AIManager().ask("ollama", prompt)
+        Path(output).write_text(code,encoding="utf-8")
+        return output
