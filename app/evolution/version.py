@@ -15,9 +15,21 @@ class Version:
     major: int
     minor: int
     patch: int
+    suffix: str = ""
 
     def __str__(self) -> str:
-        return f"{self.major}.{self.minor}.{self.patch}"
+        s = f"{self.major}.{self.minor}.{self.patch}"
+        if self.suffix:
+            s += f"-{self.suffix}"
+        return s
+
+    @classmethod
+    def from_string(cls, version_str: str) -> Version:
+        import re
+        m = re.match(r"^(\d+)\.(\d+)\.(\d+)(?:-(.+))?$", version_str.strip())
+        if m:
+            return cls(int(m.group(1)), int(m.group(2)), int(m.group(3)), m.group(4) or "")
+        return cls(0, 0, 0)
 
 
 class VersionManager:
@@ -26,7 +38,8 @@ class VersionManager:
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
         if not self.path.exists():
-            self.save(Version(0, 6, 0))
+            from app.core.config import Config
+            self.save(Version.from_string(Config.VERSION))
 
     def load(self) -> Version:
         data = json.loads(self.path.read_text(encoding="utf-8"))
@@ -40,19 +53,19 @@ class VersionManager:
 
     def bump_major(self) -> Version:
         v = self.load()
-        n = Version(v.major + 1, 0, 0)
+        n = Version(v.major + 1, 0, 0, v.suffix)
         self.save(n)
         return n
 
     def bump_minor(self) -> Version:
         v = self.load()
-        n = Version(v.major, v.minor + 1, 0)
+        n = Version(v.major, v.minor + 1, 0, v.suffix)
         self.save(n)
         return n
 
     def bump_patch(self) -> Version:
         v = self.load()
-        n = Version(v.major, v.minor, v.patch + 1)
+        n = Version(v.major, v.minor, v.patch + 1, v.suffix)
         self.save(n)
         return n
 
