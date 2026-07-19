@@ -1,0 +1,14 @@
+JARVIS OS Sandbox Report
+Success: False
+Return code: 1
+Timed out: True
+Execution time: 0.3352s
+CPU time: 0.0000s
+Peak RAM: 0 bytes
+Security violations: None
+
+STDOUT:
+
+
+STDERR:
+Execution timed out after 0.15 seconds.

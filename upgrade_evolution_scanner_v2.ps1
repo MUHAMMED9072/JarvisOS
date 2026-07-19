@@ -1,4 +1,16 @@
-﻿from pathlib import Path
+# ==========================================
+# JARVIS Evolution Scanner v2
+# ==========================================
+
+function Write-PyFile($Path,$Content){
+ $Dir=Split-Path $Path
+ New-Item -ItemType Directory -Force -Path $Dir|Out-Null
+ Set-Content -Path $Path -Value $Content -Encoding UTF8
+ Write-Host "Installed $Path" -ForegroundColor Green
+}
+
+Write-PyFile "app\evolution\scanner.py" @'
+from pathlib import Path
 import ast
 import json
 
@@ -39,3 +51,30 @@ class ProjectScanner:
             json.dump(report,f,indent=2)
 
         return report
+'@
+
+Write-PyFile "app\evolution\brain.py" @'
+from .scanner import ProjectScanner
+
+class EvolutionBrain:
+
+    def evolve(self):
+        scan=ProjectScanner().scan()
+
+        s=scan["summary"]
+
+        print("="*50)
+        print("JARVIS EVOLUTION REPORT")
+        print("="*50)
+        print(f"Python Files : {s['files']}")
+        print(f"Classes      : {s['classes']}")
+        print(f"Functions    : {s['functions']}")
+        print(f"Imports      : {s['imports']}")
+        print()
+        print("Report saved -> data/evolution_report.json")
+        print("="*50)
+        return scan
+'@
+
+Write-Host ""
+Write-Host "Evolution Scanner v2 Installed" -ForegroundColor Cyan

@@ -1,0 +1,13 @@
+{
+  "success": false,
+  "returncode": 1,
+  "stdout": "",
+  "stderr": "Execution timed out after 0.15 seconds.\n",
+  "execution_time": 0.33518440020270646,
+  "cpu_time": 0.0,
+  "peak_ram_bytes": 0,
+  "timed_out": true,
+  "workspace": "C:\\Users\\nsmuh\\AppData\\Local\\Temp\\jarvis-sandbox-_05n3zk9",
+  "security_violations": [],
+  "reported_at": "2026-07-13T04:14:28Z"
+}

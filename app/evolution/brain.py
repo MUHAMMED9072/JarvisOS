@@ -23,78 +23,47 @@ class EvolutionBrain:
     }
 
     def evolve(self):
-        pipeline_success = False
+        Analyzer().analyze()
+        ProjectScanner().scan()
+        EvolutionPlanner().create_plan()
 
-        def _execute_pipeline():
-            nonlocal pipeline_success
+        print("="*50)
+        print("JARVIS EVOLUTION TASKS")
+        print("="*50)
+        for k,v in self.TASKS.items():
+            print(f"{k}. {v[1]}")
 
-            Analyzer().analyze()
-            RollbackManager().create_backup("app", "data/app_backup")
+        choice=input("Choose task: ").strip()
+        task,target=self.TASKS.get(choice,self.TASKS["1"])
 
-            ProjectScanner().scan()
-            EvolutionPlanner().create_plan()
+        RollbackManager().create_backup(target, choice)
 
-            print("="*50)
-            print("JARVIS EVOLUTION TASKS")
-            print("="*50)
-            for k,v in self.TASKS.items():
-                print(f"{k}. {v[1]}")
+        patch=CodeGenerator().generate_task(task,target)
+        PatchReviewer().review(patch,target)
 
-            choice=input("Choose task: ").strip()
-            task,target=self.TASKS.get(choice,self.TASKS["1"])
+        for _ in range(3):
+            AutoFixer().fix()
 
-            patch=CodeGenerator().generate_task(task,target)
-            review_result=PatchReviewer().review(patch,target)
+        ok,report=PatchValidator().validate(patch)
 
-            for _ in range(3):
-                if not review_result.errors and not review_result.warnings:
-                    break
-                AutoFixer().fix()
-                review_result=PatchReviewer().review(patch,target)
+        with open(patch, "r", encoding="utf-8") as f:
+            Sandbox().run(f.read())
 
-            if review_result.errors or review_result.warnings:
-                print("[BLOCKED] Patch failed review.")
-                print("See data/review_report.txt")
-                RollbackManager().restore("data/app_backup", "app")
-                pipeline_success = False
-                return
+        TestRunner().run()
+        Installer().install()
+        GitManager().status()
+        VersionManager().bump_patch()
+        Benchmark().run(task, TestRunner().run)
 
-            ok,report=PatchValidator().validate(patch, review=review_result)
+        print("="*50)
+        for line in report:
+            print(line)
+        print("="*50)
 
-            print("="*50)
-            for line in report:
-                print(line)
-            print("="*50)
+        if ok:
+            print("[READY] Patch passed validation.")
+        else:
+            print("[BLOCKED] Patch failed validation.")
+            print("See data/validation_report.txt")
 
-            if not ok:
-                print("[BLOCKED] Patch failed validation.")
-                print("See data/validation_report.txt")
-                RollbackManager().restore("data/app_backup", "app")
-                pipeline_success = False
-                return
-
-            sandbox_result = Sandbox().run(review_result.clean_code)
-            
-            if not sandbox_result.success:
-                print("[BLOCKED] Sandbox execution failed.")
-                RollbackManager().restore("data/app_backup", "app")
-                pipeline_success = False
-                return
-
-            test_result = TestRunner().run()
-            if not test_result.success:
-                print("[BLOCKED] Tests failed.")
-                RollbackManager().restore("data/app_backup", "app")
-                pipeline_success = False
-                return
-
-            Installer().install()
-            GitManager().add_all()
-            GitManager().commit(task)
-            VersionManager().bump_patch()
-
-            print("[READY] Patch passed validation and was installed.")
-            pipeline_success = True
-
-        Benchmark().run("evolution_pipeline", _execute_pipeline)
-        return pipeline_success
+        return ok

@@ -1,0 +1,10 @@
+
+You are the AI architect for JARVIS OS.
+
+Project statistics:
+- Python files: 112
+- Classes: 58
+- Functions: 121
+- Imports: 140
+
+Return ONLY a numbered improvement plan.

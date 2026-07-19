@@ -1,0 +1,30 @@
+warning: in the working copy of 'app/ai/router.py', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/app/ai/router.py b/app/ai/router.py[m
+[1mindex 724fbe6..d8c54f7 100644[m
+[1m--- a/app/ai/router.py[m
+[1m+++ b/app/ai/router.py[m
+[36m@@ -1,12 +1,13 @@[m
+[31m-﻿from .providers.ollama import OllamaProvider[m
+[32m+[m[32mfrom .providers.ollama import OllamaProvider[m
+ from .providers.openai import OpenAIProvider[m
+ from .providers.claude import ClaudeProvider[m
+ from .providers.gemini import GeminiProvider[m
+ from .providers.deepseek import DeepSeekProvider[m
+[32m+[m[32mfrom .providers.base import AIProvider[m
+ [m
+ class AIRouter:[m
+     def __init__(self):[m
+[31m-        self.providers = {[m
+[32m+[m[32m        self.providers: dict[str, AIProvider] = {[m
+             "ollama": OllamaProvider(),[m
+             "openai": OpenAIProvider(),[m
+             "claude": ClaudeProvider(),[m
+[36m@@ -14,7 +15,7 @@[m [mclass AIRouter:[m
+             "deepseek": DeepSeekProvider(),[m
+         }[m
+ [m
+[31m-    def ask(self, provider, prompt):[m
+[32m+[m[32m    def ask(self, provider: str, prompt: str) -> str:[m
+         if provider not in self.providers:[m
+             raise ValueError(f"Unknown provider: {provider}")[m
+         return self.providers[provider].generate(prompt)[m

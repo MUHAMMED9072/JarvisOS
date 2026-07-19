@@ -1,22 +1,18 @@
 from pathlib import Path
 import ast
-from dataclasses import dataclass, field
-
-@dataclass
-class ReviewResult:
-    syntax: bool = False
-    imports_ok: bool = True
-    errors: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
-    clean_code: str = ""
 
 class PatchReviewer:
 
     def review(self,
                patch="data/generated_patch.py",
-               original="app/skills/loader.py") -> ReviewResult:
+               original="app/skills/loader.py"):
 
-        result = ReviewResult()
+        result={
+            "syntax":False,
+            "imports_ok":True,
+            "errors":[],
+            "warnings":[]
+        }
 
         code=Path(patch).read_text(encoding="utf-8")
 
@@ -28,25 +24,23 @@ class PatchReviewer:
                 lines=lines[:-1]
             code="\n".join(lines)
 
-        result.clean_code = code
-
         try:
             ast.parse(code)
-            result.syntax=True
+            result["syntax"]=True
         except Exception as e:
-            result.errors.append(f"Syntax: {e}")
+            result["errors"].append(f"Syntax: {e}")
 
         if "package = app.skills" in code and "import app.skills" not in code:
-            result.warnings.append(
+            result["warnings"].append(
                 "Uses app.skills without importing app.skills"
             )
 
         Path("data/review_report.txt").write_text(
             "\n".join(
                 ["PATCH REVIEW",
-                 f"Syntax OK: {result.syntax}",
-                 *["ERROR: "+e for e in result.errors],
-                 *["WARNING: "+w for w in result.warnings]]
+                 f"Syntax OK: {result['syntax']}",
+                 *["ERROR: "+e for e in result["errors"]],
+                 *["WARNING: "+w for w in result["warnings"]]]
             ),
             encoding="utf-8"
         )

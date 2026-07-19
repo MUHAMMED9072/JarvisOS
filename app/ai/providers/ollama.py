@@ -1,17 +1,9 @@
-﻿from dotenv import load_dotenv
-import os
-
-load_dotenv()
+﻿from ollama import chat
 
 class OllamaProvider:
-    def __init__(self):
-        self.host = os.getenv("OLLAMA_HOST","http://localhost:11434")
-
-    def generate(self, prompt:str)->str:
-        import ollama
-        client = ollama.Client(host=self.host)
-        response = client.chat(
-            model="llama3.1",
+    def generate(self, prompt:str, model="qwen2.5-coder"):
+        r = chat(
+            model=model,
             messages=[{"role":"user","content":prompt}]
         )
-        return response["message"]["content"]
+        return r["message"]["content"]
