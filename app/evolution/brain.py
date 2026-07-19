@@ -47,12 +47,19 @@ class EvolutionBrain:
             review_result=PatchReviewer().review(patch,target)
 
             for _ in range(3):
-                if not review_result["errors"] and not review_result["warnings"]:
+                if not review_result.errors and not review_result.warnings:
                     break
                 AutoFixer().fix()
                 review_result=PatchReviewer().review(patch,target)
 
-            ok,report=PatchValidator().validate(patch)
+            if review_result.errors or review_result.warnings:
+                print("[BLOCKED] Patch failed review.")
+                print("See data/review_report.txt")
+                RollbackManager().restore("data/app_backup", "app")
+                pipeline_success = False
+                return
+
+            ok,report=PatchValidator().validate(patch, review=review_result)
 
             print("="*50)
             for line in report:
@@ -66,9 +73,7 @@ class EvolutionBrain:
                 pipeline_success = False
                 return
 
-            from pathlib import Path
-            source = Path(patch).read_text(encoding="utf-8")
-            sandbox_result = Sandbox().run(source)
+            sandbox_result = Sandbox().run(review_result.clean_code)
             
             if not sandbox_result.success:
                 print("[BLOCKED] Sandbox execution failed.")
