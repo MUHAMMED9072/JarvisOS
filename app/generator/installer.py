@@ -3,10 +3,8 @@
 import importlib
 import inspect
 
+from app.core.logger import JarvisLogger
 from app.skills.base import Skill
-from app.core.logger import get_logger
-
-logger = get_logger(__name__)
 
 
 class SkillInstaller:
@@ -38,7 +36,9 @@ class SkillInstaller:
         try:
             module = importlib.import_module(module_name)
         except (ModuleNotFoundError, ImportError) as exc:
-            logger.exception("Failed to import skill module '%s': %s", module_name, exc)
+            JarvisLogger.error(
+                f"Failed to import skill module '{module_name}': {exc}"
+            )
             return []
 
         registered_intents: list[str] = []
@@ -56,17 +56,14 @@ class SkillInstaller:
                 manager.register(skill)
                 registered_intents.append(skill.intent)
 
-                logger.info(
-                    "Registered skill '%s' (intent='%s')",
-                    obj.__name__,
-                    skill.intent,
+                JarvisLogger.info(
+                    f"Registered skill '{obj.__name__}' (intent='{skill.intent}')"
                 )
 
-            except Exception:
-                logger.exception(
-                    "Failed to install skill '%s' from module '%s'",
-                    obj.__name__,
-                    module_name,
+            except Exception as exc:
+                JarvisLogger.error(
+                    f"Failed to install skill '{obj.__name__}' "
+                    f"from module '{module_name}': {exc}"
                 )
 
         return registered_intents
