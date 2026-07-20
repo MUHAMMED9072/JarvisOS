@@ -95,11 +95,10 @@ class SkillLoader:
             )
             return []
 
-        # Drop the previous instances for this module's intents so a reload
-        # yields a clean replacement rather than duplicate registration.
-        # Direct dict mutation is required: SkillManager exposes no public
-        # unregister/remove API, so a reload cannot otherwise evict the
-        # stale instance before the new one is registered.
+        # Evict the previous instances for this module's intents so a reload
+        # yields a clean replacement rather than a duplicate registration.
+        # We use ``SkillManager.unregister`` as the public API; any intent
+        # that does not belong to this module is left untouched.
         previous_intents: list[str] = [
             registered_intent
             for registered_intent, registered_skill in list(manager.skills.items())
@@ -107,7 +106,7 @@ class SkillLoader:
         ]
 
         for registered_intent in previous_intents:
-            manager.skills.pop(registered_intent, None)
+            manager.unregister(registered_intent)
 
         reloaded_intents: list[str] = []
 
