@@ -1,9 +1,18 @@
-﻿from ollama import chat
+﻿# app/ai/providers/ollama.py
+from __future__ import annotations
+
+from ollama import chat
+
 
 class OllamaProvider:
-    def generate(self, prompt:str, model="qwen2.5-coder"):
+
+    provider_name: str = "ollama"
+
+    def generate(self, prompt: str, model: str = "qwen2.5-coder") -> str:
+
         r = chat(
             model=model,
-            messages=[{"role":"user","content":prompt}]
+            messages=[{"role": "user", "content": prompt}],
         )
         return r["message"]["content"]
+    

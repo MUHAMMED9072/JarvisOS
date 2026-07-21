@@ -472,3 +472,29 @@ class TestAIRouterReload:
 
         # The router still routes through the original provider.
         assert router.ask("delta", "ping") == original.generate("ping")
+
+
+class TestAIProviderProtocol:
+
+    def test_every_discovered_provider_satisfies_protocol(self):
+        from app.ai.providers.base import AIProvider
+        from app.ai.router import AIRouter
+
+        router = AIRouter()
+
+        for name, provider in router.providers.items():
+            assert isinstance(provider, AIProvider), (
+                f"Provider '{name}' ({type(provider).__name__}) "
+                "does not satisfy AIProvider"
+            )
+
+    def test_provider_name_is_a_non_empty_string(self):
+        from app.ai.router import AIRouter
+
+        router = AIRouter()
+
+        for name, provider in router.providers.items():
+            assert hasattr(provider, "provider_name")
+            assert isinstance(provider.provider_name, str)
+            assert provider.provider_name == name
+            assert provider.provider_name != ""
