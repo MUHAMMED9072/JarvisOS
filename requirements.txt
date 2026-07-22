@@ -2,5 +2,9 @@ customtkinter
 ttkbootstrap
 python-dotenv
 rich
-psutil
 psutil>=7.0.0
+faster-whisper
+sounddevice
+soundfile
+ollama
+pytest
