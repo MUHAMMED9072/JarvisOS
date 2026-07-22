@@ -4,6 +4,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from app.core.config import Config
+
 
 class JarvisLogger:
 
@@ -21,7 +23,7 @@ class JarvisLogger:
         log_file = log_dir / "jarvis.log"
 
         logging.basicConfig(
-            level=logging.INFO,
+            level=getattr(logging, Config.LOG_LEVEL, logging.INFO),
             format="%(asctime)s | %(levelname)s | %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
             handlers=[
