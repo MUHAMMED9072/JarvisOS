@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import ast
 import json
-import logging
 import os
 import shutil
 import signal
@@ -22,13 +21,14 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from app.core.logger import JarvisLogger
+
 try:
     import psutil
 except ImportError:  # pragma: no cover - retained for minimal installations
     psutil = None  # type: ignore[assignment]
 
 
-LOGGER = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_REPORT_DIRECTORY = PROJECT_ROOT / "data"
 
@@ -63,7 +63,7 @@ class WorkspaceManager:
     def create_workspace(self) -> Path:
         with self._lock:
             workspace = Path(tempfile.mkdtemp(prefix=self.prefix))
-            LOGGER.debug("Created sandbox workspace: %s", workspace)
+            JarvisLogger.debug("Created sandbox workspace: %s", workspace)
             return workspace
 
     def cleanup_workspace(self, workspace: Path | None) -> None:
@@ -72,12 +72,12 @@ class WorkspaceManager:
         with self._lock:
             try:
                 shutil.rmtree(workspace, ignore_errors=False)
-                LOGGER.debug("Removed sandbox workspace: %s", workspace)
+                JarvisLogger.debug("Removed sandbox workspace: %s", workspace)
             except FileNotFoundError:
                 return
             except OSError:
                 # Windows can temporarily retain a handle after process termination.
-                LOGGER.warning("Could not fully remove sandbox workspace: %s", workspace, exc_info=True)
+                JarvisLogger.warning("Could not fully remove sandbox workspace: %s", workspace, exc_info=True)
 
 
 class SecurityValidator:
@@ -180,7 +180,7 @@ class ProcessRunner:
                     child.kill()
                 return
             except (psutil.Error, OSError):
-                LOGGER.debug("psutil process-tree cleanup failed", exc_info=True)
+                JarvisLogger.debug("psutil process-tree cleanup failed", exc_info=True)
         try:
             if os.name == "nt":
                 subprocess.run(
@@ -211,7 +211,7 @@ class ProcessRunner:
             elapsed = time.monotonic() - started
             if elapsed >= self.timeout:
                 timed_out = True
-                LOGGER.warning("Sandbox process %s timed out after %.2fs", process.pid, elapsed)
+                JarvisLogger.warning("Sandbox process %s timed out after %.2fs", process.pid, elapsed)
                 self._kill_process_tree(process)
                 break
             if monitored is not None:
@@ -287,7 +287,7 @@ class Sandbox:
                 result = SandboxResult(False, -1, "", "Generated code was blocked by security validation.",
                                        security_violations=violations)
                 self.reporter.write(result)
-                LOGGER.warning("Blocked generated sandbox code: %s", "; ".join(violations))
+                JarvisLogger.warning("Blocked generated sandbox code: %s", "; ".join(violations))
                 return result
 
             workspace: Path | None = None
@@ -300,10 +300,10 @@ class Sandbox:
                 result = SandboxResult(returncode == 0 and not timed_out, returncode, stdout, stderr,
                                        duration, cpu, ram, timed_out, str(workspace))
                 self.reporter.write(result)
-                LOGGER.info("Sandbox run finished: success=%s returncode=%s duration=%.3fs", result.success, returncode, duration)
+                JarvisLogger.info("Sandbox run finished: success=%s returncode=%s duration=%.3fs", result.success, returncode, duration)
                 return result
             except (OSError, subprocess.SubprocessError) as exc:
-                LOGGER.exception("Sandbox execution setup failed")
+                JarvisLogger.exception("Sandbox execution setup failed")
                 result = SandboxResult(False, -1, "", f"Sandbox execution failed: {exc}", workspace=str(workspace) if workspace else None)
                 self.reporter.write(result)
                 return result

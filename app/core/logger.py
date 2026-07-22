@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 
 class JarvisLogger:
@@ -32,25 +33,31 @@ class JarvisLogger:
         cls._initialized = True
 
     @classmethod
-    def info(cls, message: str):
+    def debug(cls, message: str, *args: Any, **kwargs: Any) -> None:
 
         cls.setup()
-        logging.info(message)
+        logging.debug(message, *args, **kwargs)
 
     @classmethod
-    def warning(cls, message: str):
+    def info(cls, message: str, *args: Any, **kwargs: Any) -> None:
 
         cls.setup()
-        logging.warning(message)
+        logging.info(message, *args, **kwargs)
 
     @classmethod
-    def error(cls, message: str):
+    def warning(cls, message: str, *args: Any, **kwargs: Any) -> None:
 
         cls.setup()
-        logging.error(message)
+        logging.warning(message, *args, **kwargs)
 
     @classmethod
-    def debug(cls, message: str):
+    def error(cls, message: str, *args: Any, **kwargs: Any) -> None:
 
         cls.setup()
-        logging.debug(message)
+        logging.error(message, *args, **kwargs)
+
+    @classmethod
+    def exception(cls, message: str, *args: Any, **kwargs: Any) -> None:
+
+        cls.setup()
+        logging.exception(message, *args, **kwargs)
