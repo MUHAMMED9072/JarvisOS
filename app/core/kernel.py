@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from app.ai.router import AIRouter
 from app.core.config import Config
 from app.core.event_bus import EventBus
 from app.core.logger import JarvisLogger
 from app.core.registry import ServiceRegistry
+from app.cortex.brains.deep_brain import DeepBrain
+from app.cortex.brains.fast_brain import FastBrain
+from app.cortex.brains.smart_brain import SmartBrain
 from app.cortex.dispatcher import Dispatcher
 from app.cortex.pipeline import CortexPipeline
 from app.memory import MemoryManager
@@ -63,6 +67,26 @@ class JarvisKernel:
         self.registry.register(
             "cortex",
             self.cortex
+        )
+
+        self.registry.register(
+            "ai_router",
+            AIRouter(),
+        )
+
+        self.registry.register(
+            "fast_brain",
+            FastBrain(self.registry),
+        )
+
+        self.registry.register(
+            "smart_brain",
+            SmartBrain(self.registry),
+        )
+
+        self.registry.register(
+            "deep_brain",
+            DeepBrain(self.registry),
         )
 
         # --------------------------------------------------

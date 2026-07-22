@@ -15,6 +15,12 @@ class Dispatcher:
             "memory"
         )
 
+        self._brains = {
+            "fast": registry.get("fast_brain"),
+            "smart": registry.get("smart_brain"),
+            "deep": registry.get("deep_brain"),
+        }
+
     def dispatch(self, request):
 
         # Store user message
@@ -35,13 +41,14 @@ class Dispatcher:
             skill=request.intent,
         )
 
-        # Find skill
-        skill = self.skill_manager.get(
-            request.intent
+        # Select brain by type
+        brain = self._brains.get(
+            request.brain,
+            self._brains["deep"],
         )
 
-        # Execute skill
-        result = skill.execute(request)
+        # Execute via brain
+        result = brain.process(request)
 
         # Store assistant response
         self.memory.remember(
