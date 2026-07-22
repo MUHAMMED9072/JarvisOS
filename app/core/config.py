@@ -16,7 +16,7 @@ class Config:
     # PATHS
     # ======================================================
 
-    ROOT = Path.cwd()
+    ROOT = Path(__file__).resolve().parents[2]
 
     APP_DIR = ROOT / "app"
 
