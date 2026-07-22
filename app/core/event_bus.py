@@ -26,5 +26,3 @@ class EventBus:
             callback(*args, **kwargs)
 
 
-# Global EventBus instance used throughout JARVIS
-event_bus = EventBus()
