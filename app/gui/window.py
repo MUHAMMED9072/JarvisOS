@@ -1,13 +1,18 @@
+from __future__ import annotations
+
 import customtkinter as ctk
 
-from .theme import *
 from app.core.registry import ServiceRegistry
-from app.utils.system import *
+
+from .components.sidebar import Sidebar
+from .components.statusbar import StatusBar
+from .components.topbar import TopBar
+from .theme import COLORS, APP_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT
 
 
 class JarvisWindow(ctk.CTk):
 
-    def __init__(self, registry: ServiceRegistry):
+    def __init__(self, registry: ServiceRegistry) -> None:
         super().__init__()
 
         self.registry = registry
@@ -21,207 +26,127 @@ class JarvisWindow(ctk.CTk):
 
         self.minsize(1200, 700)
 
-        self.configure(
-            fg_color=COLORS["background"]
-        )
+        self.configure(fg_color=COLORS["background"])
+
+        self.pages: dict[str, ctk.CTkFrame] = {}
+        self.current_page: ctk.CTkFrame | None = None
 
         self.build_sidebar()
 
         self.build_main()
 
-        self.update_dashboard()
+        self._init_pages()
+
+        self.switch_page("dashboard")
 
     # =====================================
     # SIDEBAR
     # =====================================
 
-    def build_sidebar(self):
+    def build_sidebar(self) -> None:
 
-        self.sidebar = ctk.CTkFrame(
+        self.sidebar = Sidebar(
             self,
-            width=240,
-            corner_radius=0,
-            fg_color=COLORS["sidebar"]
+            on_navigate=self.switch_page,
         )
 
         self.sidebar.pack(
             side="left",
-            fill="y"
+            fill="y",
         )
-
-        self.logo = ctk.CTkLabel(
-            self.sidebar,
-            text="🤖 JARVIS",
-            font=("Segoe UI", 30, "bold"),
-            text_color=COLORS["accent"]
-        )
-
-        self.logo.pack(
-            pady=(35, 25)
-        )
-
-        menu = [
-            "🏠 Dashboard",
-            "💬 Chat",
-            "🎤 Voice",
-            "🧠 Memory",
-            "⚡ Skills",
-            "🤖 AI",
-            "⚙ Settings",
-            "📜 Logs"
-        ]
-
-        for item in menu:
-
-            button = ctk.CTkButton(
-                self.sidebar,
-                text=item,
-                anchor="w",
-                height=42,
-                corner_radius=8
-            )
-
-            button.pack(
-                fill="x",
-                padx=15,
-                pady=5
-            )
 
     # =====================================
     # MAIN AREA
     # =====================================
 
-    def build_main(self):
+    def build_main(self) -> None:
 
         self.main = ctk.CTkFrame(
             self,
-            fg_color=COLORS["background"]
+            fg_color=COLORS["background"],
         )
 
         self.main.pack(
             side="right",
             fill="both",
-            expand=True
+            expand=True,
         )
 
-        self.header()
-
-        self.dashboard()
-
-    # =====================================
-    # HEADER
-    # =====================================
-
-    def header(self):
-
-        title = ctk.CTkLabel(
-            self.main,
-            text="Welcome to JARVIS OS",
-            font=("Segoe UI", 32, "bold"),
-            text_color="white"
-        )
-
-        title.pack(
-            anchor="nw",
+        # Top bar
+        self.topbar = TopBar(self.main)
+        self.topbar.pack(
+            fill="x",
             padx=40,
-            pady=(30, 5)
+            pady=(30, 5),
         )
 
-        subtitle = ctk.CTkLabel(
+        # Page container — exactly one page visible at a time
+        self.page_container = ctk.CTkFrame(
             self.main,
-            text="Your personal AI operating system",
-            font=("Segoe UI", 16),
-            text_color="#94A3B8"
+            fg_color="transparent",
         )
 
-        subtitle.pack(
-            anchor="nw",
-            padx=40
+        self.page_container.pack(
+            fill="both",
+            expand=True,
+        )
+
+        # Status bar
+        self.statusbar = StatusBar(self.main, self.registry)
+        self.statusbar.pack(
+            fill="x",
+            side="bottom",
         )
 
     # =====================================
-    # DASHBOARD
+    # PAGE REGISTRATION
     # =====================================
 
-    def dashboard(self):
+    def _init_pages(self) -> None:
 
-        self.card = ctk.CTkFrame(
-            self.main,
-            width=900,
-            height=320,
-            corner_radius=15,
-            fg_color=COLORS["card"]
-        )
+        from app.gui.pages.dashboard import DashboardPage
+        from app.gui.pages.ai_chat import AIChatPage
+        from app.gui.pages.voice import VoicePage
+        from app.gui.pages.memory import MemoryPage
+        from app.gui.pages.skills import SkillsPage
+        from app.gui.pages.ai import AIPage
+        from app.gui.pages.settings import SettingsPage
+        from app.gui.pages.logs import LogsPage
 
-        self.card.pack(
-            anchor="nw",
-            padx=40,
-            pady=30
-        )
+        page_classes = [
+            DashboardPage,
+            AIChatPage,
+            VoicePage,
+            MemoryPage,
+            SkillsPage,
+            AIPage,
+            SettingsPage,
+            LogsPage,
+        ]
 
-        self.card.pack_propagate(False)
+        for cls in page_classes:
+            page = cls(self.page_container, self.registry)
+            self.pages[page.name] = page
 
-        title = ctk.CTkLabel(
-            self.card,
-            text="System Monitor",
-            font=("Segoe UI",24,"bold"),
-            text_color="white"
-        )
-
-        title.pack(
-            anchor="nw",
-            padx=20,
-            pady=(20,10)
-        )
-
-        self.status = ctk.CTkLabel(
-            self.card,
-            justify="left",
-            font=("Consolas",17),
-            text_color="white"
-        )
-
-        self.status.pack(
-            anchor="nw",
-            padx=20
-        )
     # =====================================
-    # LIVE DASHBOARD
+    # NAVIGATION
     # =====================================
 
-    def update_dashboard(self):
+    def switch_page(self, page_name: str) -> None:
 
-        try:
+        if self.current_page is not None:
+            self.current_page.on_deactivate()
+            self.current_page.pack_forget()
 
-            cpu = cpu_usage()
-            ram = ram_usage()
-            disk = disk_usage()
-            internet = internet_status()
-            os_name = operating_system()
-            py = python_version()
-            clock = current_time()
+        page = self.pages.get(page_name)
 
-            self.status.configure(
-               text=(
-    f"CPU Usage      : {cpu}\n\n"
-    f"RAM Usage      : {ram}\n\n"
-    f"Disk Usage     : {disk}\n\n"
-    f"Internet       : {internet}\n\n"
-    f"Operating Sys  : {os_name}\n\n"
-    f"Python Version : {py}\n\n"
-    f"Time           : {clock}\n\n"
-    f"Ollama Status  : Online\n\n"
-    f"Voice Engine   : Ready"
-)
-            )
+        if page is None:
+            return
 
-        except Exception as e:
+        self.current_page = page
+        page.pack(fill="both", expand=True)
+        page.on_activate()
 
-            self.status.configure(
-                text=f"Dashboard Error:\n\n{e}"
-            )
-
-        self.after(
-            1000,
-            self.update_dashboard
-        )
+        self.topbar.set_title(page.title)
+        self.sidebar.set_active(page_name)
+        self.statusbar.set_status(f"Page: {page.title}")
