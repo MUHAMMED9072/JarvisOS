@@ -3,13 +3,18 @@ from faster_whisper import WhisperModel
 
 class WhisperProvider:
 
-    def __init__(self, model_name: str = "base"):
+    def __init__(
+        self,
+        model_name: str = "base",
+        device: str = "cpu",
+        compute_type: str = "int8",
+    ):
         print("Loading Whisper model...")
 
         self.model = WhisperModel(
             model_name,
-            device="cpu",
-            compute_type="int8",
+            device=device,
+            compute_type=compute_type,
         )
 
         print("Whisper Ready")
@@ -24,4 +29,3 @@ class WhisperProvider:
             text += segment.text + " "
 
         return text.strip()
-    

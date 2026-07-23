@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app.voice.config import VoiceConfig
+
 
 class Config:
 
@@ -44,9 +46,16 @@ class Config:
     # VOICE
     # ======================================================
 
+    # Backward-compatible voice constants. The single source of truth
+    # for voice configuration is ``VOICE`` below — these two globals
+    # are kept so legacy code (e.g. GUI strings) continues to work.
     WAKE_WORD = "jarvis"
 
     DEFAULT_LANGUAGE = "en"
+
+    # Single source of truth for the voice subsystem. ``enabled``
+    # defaults to ``False`` so headless / test runs are unaffected.
+    VOICE = VoiceConfig()
 
     # ======================================================
     # LOGGING

@@ -13,6 +13,8 @@ from app.cortex.pipeline import CortexPipeline
 from app.memory import MemoryManager
 from app.skills.loader import SkillLoader
 from app.skills.manager import SkillManager
+from app.voice.config import VoiceConfig
+from app.voice.manager import VoiceManager
 
 
 class JarvisKernel:
@@ -36,6 +38,8 @@ class JarvisKernel:
         self.cortex = CortexPipeline()
 
         self.dispatcher: Dispatcher | None = None
+
+        self.voice_manager: VoiceManager | None = None
 
         self.running = False
 
@@ -90,6 +94,19 @@ class JarvisKernel:
         )
 
         # --------------------------------------------------
+        # Voice configuration is registered *before* the
+        # VoiceManager is constructed so the manager can read it
+        # from the registry rather than importing the global
+        # ``Config``. This keeps the dependency direction one-way:
+        # voice -> core, never the reverse.
+        # --------------------------------------------------
+
+        self.registry.register(
+            "voice_config",
+            VoiceConfig(),
+        )
+
+        # --------------------------------------------------
         # Load Skills AFTER services exist
         # --------------------------------------------------
 
@@ -111,6 +128,19 @@ class JarvisKernel:
             self.dispatcher
         )
 
+        # --------------------------------------------------
+        # VoiceManager depends on cortex, dispatcher, and
+        # event_bus. It must therefore be built last. It is a
+        # no-op when ``VOICE.enabled`` is False (the default).
+        # --------------------------------------------------
+
+        self.voice_manager = VoiceManager(self.registry)
+
+        self.registry.register(
+            "voice_manager",
+            self.voice_manager,
+        )
+
         self.running = True
 
         self.logger.info("Configuration Loaded")
@@ -123,10 +153,23 @@ class JarvisKernel:
             f"{len(self.skill_manager.skills)} Skills Loaded"
         )
         self.logger.info("Dispatcher Ready")
+        self.logger.info(
+            f"Voice Subsystem: "
+            f"{'Enabled' if Config.VOICE.enabled else 'Disabled'}"
+        )
         self.logger.info("Kernel Ready")
+
+        # Start voice *after* the registry is fully populated. The
+        # manager itself checks the config and silently no-ops when
+        # disabled, so we don't need a separate branch here.
+        if self.voice_manager is not None:
+            self.voice_manager.start()
 
     def shutdown(self):
 
         self.logger.info("Shutting down JARVIS OS")
+
+        if self.voice_manager is not None:
+            self.voice_manager.stop()
 
         self.running = False
