@@ -25,6 +25,9 @@ Thumbs.db
 .pytest_cache/
 .mypy_cache/
 
+# Temp audio files
+temp.wav
+
 # Evolution Engine audit records (per-decision JSON snapshots)
 data/evolution/decisions/
 

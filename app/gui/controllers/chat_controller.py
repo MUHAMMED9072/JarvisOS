@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from app.ai.providers.base import AIResponse
 from app.cortex.handlers.ai_handler import AIHandler
 from app.cortex.handlers.memory_handler import MemoryHandler
 from app.skills.result import SkillResult

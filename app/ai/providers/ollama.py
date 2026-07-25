@@ -1,20 +1,17 @@
-# app/ai/providers/ollama.py
-"""
-Ollama provider - local LLM runtime.
-
-This is the only provider with a real, working SDK integration today.
-The ``ollama`` Python package is imported lazily inside ``generate()``
-rather than at module load time, so that importing the module never
-fails on machines that do not have the ``ollama`` package installed
-(e.g. CI, or systems that only use the cloud providers).
-"""
 from __future__ import annotations
 
 import os
+import time
 
 from dotenv import load_dotenv
 
-from .base import AIProvider, ProviderNotConfiguredError
+from .base import (
+    AIProvider,
+    AIResponse,
+    ProviderNotConfiguredError,
+    validate_str,
+    validate_timeout,
+)
 
 
 load_dotenv()
@@ -36,6 +33,8 @@ class OllamaProvider(AIProvider):
 
     provider_name: str = "ollama"
 
+    capabilities: frozenset = frozenset()
+
     DEFAULT_BASE_URL = "http://localhost:11434"
     DEFAULT_MODEL = "qwen2.5-coder"
     DEFAULT_TIMEOUT = 30.0
@@ -49,27 +48,19 @@ class OllamaProvider(AIProvider):
         model: str | None = None,
         timeout: float = DEFAULT_TIMEOUT,
     ) -> None:
-        """
-        Construct the Ollama provider.
-
-        All arguments are keyword-only and optional.  Missing values
-        fall back to environment variables (``OLLAMA_HOST``,
-        ``OLLAMA_MODEL``) and finally to the class-level defaults.
-
-        No network call is performed here - the daemon is contacted
-        only when ``generate()`` is invoked.
-        """
-        self._base_url = self._validate_str(
+        self._base_url = validate_str(
             self._resolve_host(base_url),
             "base_url",
+            owner=self.__class__.__name__,
         )
-        self._model = self._validate_str(
+        self._model = validate_str(
             self._resolve_model(model),
             "model",
+            owner=self.__class__.__name__,
         )
-        self._timeout = self._validate_timeout(timeout)
+        self._timeout = validate_timeout(timeout, owner=self.__class__.__name__)
 
-    def generate(self, prompt: str, *, model: str | None = None) -> str:
+    def generate(self, prompt: str, *, model: str | None = None) -> AIResponse:
         """
         Generate a text response for the supplied prompt.
 
@@ -89,15 +80,22 @@ class OllamaProvider(AIProvider):
 
         effective_model = model if isinstance(model, str) and model else self._model
 
-        # Lazy SDK import - keeps the module importable on machines
-        # where the ``ollama`` package is not installed.
+        start = time.monotonic()
+
         from ollama import chat  # type: ignore[import-not-found]
 
         response = chat(
             model=effective_model,
             messages=[{"role": "user", "content": prompt}],
         )
-        return response["message"]["content"]
+        latency_ms = (time.monotonic() - start) * 1000
+
+        return AIResponse(
+            response["message"]["content"],
+            provider=self.provider_name,
+            model=effective_model,
+            latency_ms=latency_ms,
+        )
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -105,10 +103,6 @@ class OllamaProvider(AIProvider):
 
     @classmethod
     def _resolve_host(cls, provided: str | None) -> str:
-        """Return the explicit value if given, else the env var,
-        else the default.  An explicit empty string is *not*
-        coerced to the default - it is preserved so the validator
-        can reject it."""
         if provided is not None:
             return provided
         env_value = os.getenv(cls.ENV_HOST_VAR)
@@ -124,25 +118,3 @@ class OllamaProvider(AIProvider):
         if env_value is not None:
             return env_value
         return cls.DEFAULT_MODEL
-
-    @staticmethod
-    def _validate_str(value: object, field: str) -> str:
-        if not isinstance(value, str) or not value.strip():
-            raise ProviderNotConfiguredError(
-                f"OllamaProvider: {field} must be a non-empty string"
-            )
-        return value
-
-    @staticmethod
-    def _validate_timeout(value: object) -> float:
-        # Reject bool explicitly (``bool`` is a subclass of ``int``).
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise ProviderNotConfiguredError(
-                f"OllamaProvider: timeout must be a positive number, "
-                f"got {type(value).__name__}"
-            )
-        if value <= 0:
-            raise ProviderNotConfiguredError(
-                f"OllamaProvider: timeout must be > 0, got {value!r}"
-            )
-        return float(value)

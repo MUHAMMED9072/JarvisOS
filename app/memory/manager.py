@@ -80,6 +80,13 @@ class MemoryManager:
 
         return None
 
+    def prune_all(self, ttl_days: int = 30) -> int:
+        """Remove history items older than *ttl_days*.
+
+        Returns the number of items removed.
+        """
+        return self.history.prune(ttl_days)
+
     def clear(self):
         self.storage.clear()
         self.session.clear()

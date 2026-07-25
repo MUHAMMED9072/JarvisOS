@@ -1,40 +1,38 @@
-# app/ai/providers/openai.py
-"""
-OpenAI provider stub.
-
-Real SDK integration (the ``openai`` Python package) is intentionally
-deferred - this module imports no third-party SDK and makes no network
-calls.  The public API (constructor signature, ``provider_name``,
-``generate(prompt) -> str``) is shaped to match the production
-``AIProvider`` contract so the real implementation can be dropped in
-later by replacing only the body of ``generate()``.
-"""
 from __future__ import annotations
 
 import os
 
+from openai import OpenAI
+
 from dotenv import load_dotenv
 
 from .base import (
-    AIProvider,
+    _ProviderBase,
+    AIResponse,
+    ProviderCapability,
     ProviderNotConfiguredError,
-    ProviderNotImplementedError,
+    _call_sdk,
+    validate_optional_str,
+    validate_str,
+    validate_timeout,
+    retry_with_backoff,
 )
 
 
 load_dotenv()
 
 
-class OpenAIProvider(AIProvider):
-    """
-    Stub for the OpenAI Chat Completions backend.
-
-    ``provider_name`` is the registration key used by ``AIRouter``;
-    do not change it without updating every call site that dispatches
-    by name.
-    """
+class OpenAIProvider(_ProviderBase):
 
     provider_name: str = "openai"
+
+    capabilities: frozenset = frozenset({
+        ProviderCapability.STREAMING,
+        ProviderCapability.FUNCTION_CALLING,
+        ProviderCapability.EMBEDDINGS,
+        ProviderCapability.IMAGE_INPUT,
+        ProviderCapability.JSON_OUTPUT,
+    })
 
     DEFAULT_BASE_URL = "https://api.openai.com/v1"
     DEFAULT_MODEL = "gpt-4o-mini"
@@ -48,60 +46,30 @@ class OpenAIProvider(AIProvider):
         base_url: str | None = None,
         model: str | None = None,
         timeout: float = DEFAULT_TIMEOUT,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        system_prompt: str | None = None,
     ) -> None:
-        """
-        Construct the OpenAI provider.
-
-        ``api_key`` may be supplied explicitly for testing; when
-        omitted, it is read lazily from ``OPENAI_API_KEY`` the first
-        time ``generate()`` is called.  This lazy resolution is what
-        lets ``AIRouter`` instantiate the provider with no arguments
-        even when the key has not been configured.
-
-        ``base_url``, ``model`` and ``timeout`` are validated eagerly
-        and raise ``ProviderNotConfiguredError`` on bad input.
-        """
-        self._api_key: str | None = self._validate_optional_str(
-            api_key, "api_key"
+        self._api_key: str | None = validate_optional_str(
+            api_key, "api_key", owner=self.__class__.__name__
         )
-        self._base_url = self._validate_str(
+        self._base_url = validate_str(
             base_url if base_url is not None else self.DEFAULT_BASE_URL,
             "base_url",
+            owner=self.__class__.__name__,
         )
-        self._model = self._validate_str(
+        self._model = validate_str(
             model if model is not None else self.DEFAULT_MODEL,
             "model",
+            owner=self.__class__.__name__,
         )
-        self._timeout = self._validate_timeout(timeout)
-
-    def generate(self, prompt: str) -> str:
-        """
-        Generate a text response for the supplied prompt.
-
-        The real implementation will call the OpenAI Chat Completions
-        endpoint at ``self._base_url`` with ``self._model`` and a
-        30-second (configurable) timeout.  Until the SDK is wired in
-        this stub raises ``ProviderNotImplementedError`` after
-        configuration has been validated, so callers can distinguish
-        "not configured" from "feature pending".
-        """
-        if not isinstance(prompt, str):
-            raise TypeError(
-                f"prompt must be str, got {type(prompt).__name__}"
-            )
-        self._resolve_api_key()
-        raise ProviderNotImplementedError(
-            f"{type(self).__name__}.generate() is not yet implemented; "
-            f"real OpenAI SDK integration pending. "
-            f"Configured model: {self._model}"
-        )
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
+        self._timeout = validate_timeout(timeout, owner=self.__class__.__name__)
+        self._temperature = temperature
+        self._max_tokens = max_tokens
+        self._system_prompt = system_prompt
+        self._client: OpenAI | None = None
 
     def _resolve_api_key(self) -> str:
-        """Return the API key, loading from env on first use."""
         if self._api_key:
             return self._api_key
         env_key = os.getenv(self.ENV_API_KEY_VAR)
@@ -113,34 +81,46 @@ class OpenAIProvider(AIProvider):
             f"in the environment and no api_key= was supplied"
         )
 
-    @staticmethod
-    def _validate_str(value: object, field: str) -> str:
-        if not isinstance(value, str) or not value.strip():
-            raise ProviderNotConfiguredError(
-                f"OpenAIProvider: {field} must be a non-empty string"
+    def _get_client(self) -> OpenAI:
+        if self._client is None:
+            api_key = self._resolve_api_key()
+            self._client = OpenAI(
+                api_key=api_key,
+                base_url=self._base_url,
+                timeout=self._timeout,
             )
-        return value
+        return self._client
 
-    @staticmethod
-    def _validate_optional_str(value: object, field: str) -> str | None:
-        if value is None:
-            return None
-        if not isinstance(value, str) or not value.strip():
-            raise ProviderNotConfiguredError(
-                f"OpenAIProvider: {field} must be a non-empty string "
-                f"when provided"
+    @retry_with_backoff()
+    def generate(self, prompt: str) -> AIResponse:
+        if not isinstance(prompt, str):
+            raise TypeError(
+                f"prompt must be str, got {type(prompt).__name__}"
             )
-        return value
-
-    @staticmethod
-    def _validate_timeout(value: object) -> float:
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise ProviderNotConfiguredError(
-                f"OpenAIProvider: timeout must be a positive number, "
-                f"got {type(value).__name__}"
-            )
-        if value <= 0:
-            raise ProviderNotConfiguredError(
-                f"OpenAIProvider: timeout must be > 0, got {value!r}"
-            )
-        return float(value)
+        client = self._get_client()
+        messages = []
+        if self._system_prompt:
+            messages.append({"role": "system", "content": self._system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        kwargs = {}
+        if self._temperature is not None:
+            kwargs["temperature"] = self._temperature
+        if self._max_tokens is not None:
+            kwargs["max_tokens"] = self._max_tokens
+        return _call_sdk(
+            sdk_call=lambda: client.chat.completions.create(
+                model=self._model,
+                messages=messages,
+                **kwargs,
+            ),
+            provider_name=self.provider_name,
+            model=self._model,
+            response_handler=lambda r: (
+                r.choices[0].message.content or "",
+                {
+                    "prompt_tokens": r.usage.prompt_tokens,
+                    "completion_tokens": r.usage.completion_tokens,
+                    "total_tokens": r.usage.total_tokens,
+                } if r.usage else {},
+            ),
+        )

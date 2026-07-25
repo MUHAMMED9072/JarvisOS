@@ -7,7 +7,7 @@ import pkgutil
 
 from app.core.logger import JarvisLogger
 
-from .providers.base import AIProvider
+from .providers.base import AIProvider, AIResponse
 
 
 _IGNORED_MODULES = frozenset({"base", "__init__"})
@@ -19,7 +19,7 @@ class AIRouter:
 
         self.providers: dict[str, AIProvider] = self._discover_providers()
 
-    def ask(self, provider: str, prompt: str) -> str:
+    def ask(self, provider: str, prompt: str) -> AIResponse:
 
         if provider not in self.providers:
             raise ValueError(f"Unknown provider: {provider}")

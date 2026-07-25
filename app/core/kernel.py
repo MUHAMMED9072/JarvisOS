@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import atexit
+import signal
+
 from app.ai.router import AIRouter
 from app.core.config import Config
 from app.core.event_bus import EventBus
@@ -42,6 +45,17 @@ class JarvisKernel:
         self.voice_manager: VoiceManager | None = None
 
         self.running = False
+
+        atexit.register(self.shutdown)
+        signal.signal(signal.SIGINT, self._signal_handler)
+        try:
+            signal.signal(signal.SIGTERM, self._signal_handler)
+        except AttributeError:
+            pass
+
+    def _signal_handler(self, signum: int, _frame) -> None:
+        self.logger.info("Received signal %d, shutting down...", signum)
+        self.shutdown()
 
     def boot(self):
 
@@ -167,9 +181,19 @@ class JarvisKernel:
 
     def shutdown(self):
 
+        if not self.running:
+            return
+
         self.logger.info("Shutting down JARVIS OS")
 
         if self.voice_manager is not None:
             self.voice_manager.stop()
 
+        try:
+            self.memory.storage.save(self.memory.storage.load())
+        except Exception:
+            self.logger.exception("Failed to flush memory during shutdown")
+
         self.running = False
+
+        self.logger.info("Shutdown complete")

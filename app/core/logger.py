@@ -22,6 +22,9 @@ class JarvisLogger:
 
         log_file = log_dir / "jarvis.log"
 
+        # force=True: ensure JARVIS always applies its intended logging
+        # configuration even when another component (e.g. pytest's log
+        # capture plugin) has already configured the root logger.
         logging.basicConfig(
             level=getattr(logging, Config.LOG_LEVEL, logging.INFO),
             format="%(asctime)s | %(levelname)s | %(message)s",
@@ -29,7 +32,8 @@ class JarvisLogger:
             handlers=[
                 logging.FileHandler(log_file, encoding="utf-8"),
                 logging.StreamHandler()
-            ]
+            ],
+            force=True,
         )
 
         cls._initialized = True

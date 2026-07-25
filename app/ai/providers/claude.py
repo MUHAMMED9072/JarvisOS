@@ -1,50 +1,42 @@
-# app/ai/providers/claude.py
-"""
-Anthropic (Claude) provider stub.
-
-The class is named ``AnthropicProvider`` to match the upstream API
-provider's name; the file is intentionally still ``claude.py`` so
-that any pre-existing imports of the form
-``from app.ai.providers.claude import ...`` keep working.  The
-``provider_name`` stays the string ``"claude"`` so that
-``AIRouter.ask("claude", ...)`` and the ``ANTHROPIC_API_KEY``
-environment variable both remain valid for every existing caller.
-
-Real SDK integration (the ``anthropic`` Python package) is
-intentionally deferred - this module imports no third-party SDK
-and makes no network calls.
-"""
 from __future__ import annotations
 
 import os
 
+from anthropic import Anthropic
+
 from dotenv import load_dotenv
 
 from .base import (
-    AIProvider,
+    _ProviderBase,
+    AIResponse,
+    ProviderCapability,
     ProviderNotConfiguredError,
-    ProviderNotImplementedError,
+    _call_sdk,
+    validate_optional_str,
+    validate_str,
+    validate_timeout,
+    retry_with_backoff,
 )
 
 
 load_dotenv()
 
 
-class AnthropicProvider(AIProvider):
-    """
-    Stub for the Anthropic Messages API backend.
-
-    ``provider_name`` is the registration key used by ``AIRouter``;
-    do not change the string ``"claude"`` without updating every
-    caller that dispatches by name (the Evolution Engine, the
-    Cortex brains, etc.).
-    """
+class AnthropicProvider(_ProviderBase):
 
     provider_name: str = "claude"
+
+    capabilities: frozenset = frozenset({
+        ProviderCapability.STREAMING,
+        ProviderCapability.FUNCTION_CALLING,
+        ProviderCapability.IMAGE_INPUT,
+        ProviderCapability.JSON_OUTPUT,
+    })
 
     DEFAULT_BASE_URL = "https://api.anthropic.com"
     DEFAULT_MODEL = "claude-3-5-sonnet-latest"
     DEFAULT_TIMEOUT = 30.0
+    DEFAULT_MAX_TOKENS = 1024
     ENV_API_KEY_VAR = "ANTHROPIC_API_KEY"
 
     def __init__(
@@ -54,60 +46,30 @@ class AnthropicProvider(AIProvider):
         base_url: str | None = None,
         model: str | None = None,
         timeout: float = DEFAULT_TIMEOUT,
+        temperature: float | None = None,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+        system_prompt: str | None = None,
     ) -> None:
-        """
-        Construct the Anthropic provider.
-
-        ``api_key`` may be supplied explicitly for testing; when
-        omitted, it is read lazily from ``ANTHROPIC_API_KEY`` the
-        first time ``generate()`` is called.  This lazy resolution
-        is what lets ``AIRouter`` instantiate the provider with no
-        arguments even when the key has not been configured.
-
-        ``base_url``, ``model`` and ``timeout`` are validated
-        eagerly and raise ``ProviderNotConfiguredError`` on bad
-        input.
-        """
-        self._api_key: str | None = self._validate_optional_str(
-            api_key, "api_key"
+        self._api_key: str | None = validate_optional_str(
+            api_key, "api_key", owner=self.__class__.__name__
         )
-        self._base_url = self._validate_str(
+        self._base_url = validate_str(
             base_url if base_url is not None else self.DEFAULT_BASE_URL,
             "base_url",
+            owner=self.__class__.__name__,
         )
-        self._model = self._validate_str(
+        self._model = validate_str(
             model if model is not None else self.DEFAULT_MODEL,
             "model",
+            owner=self.__class__.__name__,
         )
-        self._timeout = self._validate_timeout(timeout)
-
-    def generate(self, prompt: str) -> str:
-        """
-        Generate a text response for the supplied prompt.
-
-        The real implementation will call the Anthropic Messages
-        endpoint at ``self._base_url`` with ``self._model`` and a
-        30-second (configurable) timeout.  Until the SDK is wired
-        in this stub raises ``ProviderNotImplementedError`` after
-        configuration has been validated.
-        """
-        if not isinstance(prompt, str):
-            raise TypeError(
-                f"prompt must be str, got {type(prompt).__name__}"
-            )
-        self._resolve_api_key()
-        raise ProviderNotImplementedError(
-            f"{type(self).__name__}.generate() is not yet implemented; "
-            f"real Anthropic SDK integration pending. "
-            f"Configured model: {self._model}"
-        )
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
+        self._timeout = validate_timeout(timeout, owner=self.__class__.__name__)
+        self._temperature = temperature
+        self._max_tokens = max_tokens
+        self._system_prompt = system_prompt
+        self._client: Anthropic | None = None
 
     def _resolve_api_key(self) -> str:
-        """Return the API key, loading from env on first use."""
         if self._api_key:
             return self._api_key
         env_key = os.getenv(self.ENV_API_KEY_VAR)
@@ -119,34 +81,41 @@ class AnthropicProvider(AIProvider):
             f"in the environment and no api_key= was supplied"
         )
 
-    @staticmethod
-    def _validate_str(value: object, field: str) -> str:
-        if not isinstance(value, str) or not value.strip():
-            raise ProviderNotConfiguredError(
-                f"AnthropicProvider: {field} must be a non-empty string"
+    def _get_client(self) -> Anthropic:
+        if self._client is None:
+            api_key = self._resolve_api_key()
+            self._client = Anthropic(
+                api_key=api_key,
+                base_url=self._base_url,
+                timeout=self._timeout,
             )
-        return value
+        return self._client
 
-    @staticmethod
-    def _validate_optional_str(value: object, field: str) -> str | None:
-        if value is None:
-            return None
-        if not isinstance(value, str) or not value.strip():
-            raise ProviderNotConfiguredError(
-                f"AnthropicProvider: {field} must be a non-empty string "
-                f"when provided"
+    @retry_with_backoff()
+    def generate(self, prompt: str) -> AIResponse:
+        if not isinstance(prompt, str):
+            raise TypeError(
+                f"prompt must be str, got {type(prompt).__name__}"
             )
-        return value
-
-    @staticmethod
-    def _validate_timeout(value: object) -> float:
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise ProviderNotConfiguredError(
-                f"AnthropicProvider: timeout must be a positive number, "
-                f"got {type(value).__name__}"
-            )
-        if value <= 0:
-            raise ProviderNotConfiguredError(
-                f"AnthropicProvider: timeout must be > 0, got {value!r}"
-            )
-        return float(value)
+        client = self._get_client()
+        kwargs = {}
+        if self._temperature is not None:
+            kwargs["temperature"] = self._temperature
+        return _call_sdk(
+            sdk_call=lambda: client.messages.create(
+                model=self._model,
+                max_tokens=self._max_tokens,
+                system=self._system_prompt or "",
+                messages=[{"role": "user", "content": prompt}],
+                **kwargs,
+            ),
+            provider_name=self.provider_name,
+            model=self._model,
+            response_handler=lambda r: (
+                r.content[0].text,
+                {
+                    "input_tokens": r.usage.input_tokens,
+                    "output_tokens": r.usage.output_tokens,
+                } if r.usage else {},
+            ),
+        )
