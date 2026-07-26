@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import inspect
 import pkgutil
+from pathlib import Path
 from typing import Any
 
 from app.core.config import Config
@@ -102,15 +103,25 @@ class PluginManager:
         )
         return []
 
+    def _plugin_config_dir(self, name: str) -> Path:
+        return Config.DATA_DIR / "plugins" / name
+
     def load(self, name: str) -> None:
         plugin = self._plugins.get(name)
         if plugin is None:
             JarvisLogger.error("Plugin load failed: %r not registered", name)
             return
         try:
-            ctx = PluginContext(self._registry, name)
+            config_dir = self._plugin_config_dir(name)
+            ctx = PluginContext(
+                self._registry, name, config_dir=config_dir,
+            )
             ctx._set_manager(self)
             plugin._inject(ctx)
+            manifest = self._manifests.get(name)
+            if manifest and manifest.config_schema:
+                ctx.config.set_schema(manifest.config_schema)
+            ctx.load_config()
             plugin.on_load()
             JarvisLogger.info("Plugin loaded: %s", name)
         except Exception as exc:
@@ -164,6 +175,7 @@ class PluginManager:
         self._cleanup_plugin_services(name)
         plugin = self._plugins.get(name)
         if plugin is not None and plugin.context is not None:
+            plugin.context.save_config()
             plugin.context._cleanup_subscriptions()
             plugin.context._cleanup_skills()
         if remove:

@@ -1,40 +1,31 @@
 from __future__ import annotations
 
-import threading
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
+from app.core.config import Config
 from app.core.logger import JarvisLogger
-
-
-class PluginConfig:
-    def __init__(self, plugin_name: str) -> None:
-        self._plugin_name = plugin_name
-        self._lock = threading.Lock()
-        self._data: dict[str, Any] = {}
-
-    def get(self, key: str, default: Any = None) -> Any:
-        with self._lock:
-            return self._data.get(key, default)
-
-    def set(self, key: str, value: Any) -> None:
-        with self._lock:
-            self._data[key] = value
-
-    def all(self) -> dict[str, Any]:
-        with self._lock:
-            return dict(self._data)
-
-    def clear(self) -> None:
-        with self._lock:
-            self._data.clear()
+from app.plugins.sdk.config import PluginConfig
 
 
 class PluginContext:
-    def __init__(self, registry: Any, plugin_name: str = "") -> None:
+    def __init__(
+        self,
+        registry: Any,
+        plugin_name: str = "",
+        *,
+        config_dir: str | Path | None = None,
+    ) -> None:
         self._registry = registry
         self._plugin_name = plugin_name
-        self._config = PluginConfig(plugin_name)
+        self._config = PluginConfig(
+            plugin_name,
+            config_dir=config_dir,
+            event_bus=self._event_bus_ref(),
+            schema=None,
+            auto_save=True,
+        )
         self._logger = JarvisLogger
         self._manager: Any = None
         self._registered_services: list[str] = []
@@ -45,7 +36,6 @@ class PluginContext:
         self._manager = manager
 
     def register_service(self, name: str, service: Any) -> None:
-        """Register a plugin-private service (namespaced)."""
         full_name = f"plugin.{self._plugin_name}.{name}"
         if self._registry is not None:
             try:
@@ -55,7 +45,6 @@ class PluginContext:
         self._track_services([full_name])
 
     def export_service(self, name: str, service: Any) -> None:
-        """Export a shared service to the global registry."""
         if self._registry is not None:
             try:
                 self._registry.register(name, service)
@@ -123,6 +112,19 @@ class PluginContext:
         return self._config
 
     @property
+    def core_config(self) -> _CoreConfigProxy:
+        return _CoreConfigProxy()
+
+    def load_config(self) -> None:
+        self._config.load()
+
+    def save_config(self) -> None:
+        self._config.save()
+
+    def reload_config(self) -> None:
+        self._config.reload()
+
+    @property
     def event_bus(self) -> Any:
         if self._registry is None:
             return None
@@ -157,10 +159,6 @@ class PluginContext:
         if self._registry is None:
             return None
         return self._registry.get_optional("skill_manager")
-
-    # ------------------------------------------------------------------
-    # Additional service properties
-    # ------------------------------------------------------------------
 
     @property
     def template_registry(self) -> Any:
@@ -479,3 +477,13 @@ class PluginContext:
 
     def log_debug(self, message: str, *args: Any, **kwargs: Any) -> None:
         self._logger.debug(f"[Plugin] {message}", *args, **kwargs)
+
+
+class _CoreConfigProxy:
+    """Read-only proxy for core Config values."""
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(Config, name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise AttributeError("Core configuration is read-only")

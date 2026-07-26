@@ -56,3 +56,13 @@ class AIEvents:
     # ------------------------------------------------------------------
     MEMORY_STORE = "ai.memory.store"
     MEMORY_RETRIEVE = "ai.memory.retrieve"
+
+
+class PluginConfigEvents:
+    """Plugin configuration event name constants for the EventBus."""
+
+    CHANGED = "plugin.config.changed"
+    LOADED = "plugin.config.loaded"
+    SAVED = "plugin.config.saved"
+    RELOADED = "plugin.config.reloaded"
+    VALIDATION_ERROR = "plugin.config.validation_error"

@@ -1554,3 +1554,615 @@ class TestBackwardCompatibility:
     def test_check_version_importable(self):
         from app.plugins import check_version_compatibility
         assert callable(check_version_compatibility)
+
+
+# ==========================================================================
+# P10-07 – Plugin Configuration Framework
+# ==========================================================================
+
+
+@pytest.fixture
+def temp_config_dir():
+    with tempfile.TemporaryDirectory() as tmp:
+        yield Path(tmp)
+
+
+class TestPluginConfigNew:
+    """PluginConfig creation, defaults, schema."""
+
+    def test_create_without_persistence(self):
+        pc = PluginConfig("test-plugin")
+        assert pc.config_path is None
+        assert not pc.loaded
+
+    def test_create_with_persistence(self, temp_config_dir):
+        pc = PluginConfig("test-plugin", config_dir=temp_config_dir)
+        assert pc.config_path == temp_config_dir / "config.json"
+
+    def test_defaults_empty(self):
+        pc = PluginConfig("test-plugin")
+        assert pc.defaults == {}
+
+    def test_schema_extracts_defaults(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string", "default": "localhost"},
+                "port": {"type": "integer", "default": 8080},
+                "debug": {"type": "boolean", "default": False},
+            },
+        }
+        pc = PluginConfig("test-plugin", schema=schema)
+        assert pc.defaults == {"host": "localhost", "port": 8080, "debug": False}
+
+    def test_schema_without_defaults(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string"},
+                "port": {"type": "integer"},
+            },
+        }
+        pc = PluginConfig("test-plugin", schema=schema)
+        assert pc.defaults == {}
+
+    def test_set_schema_after_creation(self):
+        pc = PluginConfig("test-plugin")
+        assert pc.schema is None
+        schema = {"properties": {"key": {"type": "string", "default": "val"}}}
+        pc.set_schema(schema)
+        assert pc.schema == schema
+        assert pc.defaults == {"key": "val"}
+
+    def test_config_path_property(self, temp_config_dir):
+        pc = PluginConfig("test-plugin", config_dir=temp_config_dir)
+        assert pc.config_path == temp_config_dir / "config.json"
+
+    def test_loaded_property(self):
+        pc = PluginConfig("test-plugin")
+        assert not pc.loaded
+
+
+class TestPluginConfigDefaults:
+    """Default value population."""
+
+    def test_set_defaults_populates_missing(self):
+        schema = {
+            "properties": {
+                "host": {"type": "string", "default": "localhost"},
+                "port": {"type": "integer", "default": 3000},
+            },
+        }
+        pc = PluginConfig("test-plugin", schema=schema)
+        assert pc.get("host") is None
+        pc.set_defaults()
+        assert pc.get("host") == "localhost"
+        assert pc.get("port") == 3000
+
+    def test_set_defaults_does_not_overwrite(self):
+        schema = {
+            "properties": {
+                "host": {"type": "string", "default": "localhost"},
+                "port": {"type": "integer", "default": 3000},
+            },
+        }
+        pc = PluginConfig("test-plugin", schema=schema)
+        pc.set("host", "custom-host")
+        pc.set_defaults()
+        assert pc.get("host") == "custom-host"
+        assert pc.get("port") == 3000
+
+    def test_load_ensures_defaults(self, temp_config_dir):
+        schema = {
+            "properties": {
+                "host": {"type": "string", "default": "localhost"},
+            },
+        }
+        pc = PluginConfig("test-plugin", schema=schema, config_dir=temp_config_dir)
+        pc.load()
+        assert pc.get("host") == "localhost"
+
+    def test_load_merges_with_existing(self, temp_config_dir):
+        config_file = temp_config_dir / "config.json"
+        config_file.parent.mkdir(parents=True, exist_ok=True)
+        config_file.write_text('{"port": 9090}', encoding="utf-8")
+        schema = {
+            "properties": {
+                "host": {"type": "string", "default": "localhost"},
+                "port": {"type": "integer", "default": 3000},
+            },
+        }
+        pc = PluginConfig("test-plugin", schema=schema, config_dir=temp_config_dir)
+        pc.load()
+        assert pc.get("host") == "localhost"
+        assert pc.get("port") == 9090
+
+
+class TestPluginConfigPersistence:
+    """File-based persistence."""
+
+    def test_save_creates_file(self, temp_config_dir):
+        pc = PluginConfig("test-plugin", config_dir=temp_config_dir, auto_save=False)
+        pc.set("key", "value")
+        pc.save()
+        config_file = temp_config_dir / "config.json"
+        assert config_file.is_file()
+        import json
+        data = json.loads(config_file.read_text(encoding="utf-8"))
+        assert data == {"key": "value"}
+
+    def test_load_reads_file(self, temp_config_dir):
+        config_file = temp_config_dir / "config.json"
+        config_file.parent.mkdir(parents=True, exist_ok=True)
+        config_file.write_text('{"saved": "data"}', encoding="utf-8")
+        pc = PluginConfig("test-plugin", config_dir=temp_config_dir)
+        pc.load()
+        assert pc.get("saved") == "data"
+
+    def test_reload_updates_from_disk(self, temp_config_dir):
+        config_file = temp_config_dir / "config.json"
+        config_file.parent.mkdir(parents=True, exist_ok=True)
+        config_file.write_text('{"key": "original"}', encoding="utf-8")
+        pc = PluginConfig("test-plugin", config_dir=temp_config_dir)
+        pc.load()
+        assert pc.get("key") == "original"
+        pc.set("key", "modified")
+        assert pc.get("key") == "modified"
+        config_file.write_text('{"key": "disk-update"}', encoding="utf-8")
+        pc.reload()
+        assert pc.get("key") == "disk-update"
+
+    def test_auto_save_on_set(self, temp_config_dir):
+        pc = PluginConfig("test-plugin", config_dir=temp_config_dir, auto_save=True)
+        pc.set("auto", "saved")
+        config_file = temp_config_dir / "config.json"
+        assert config_file.is_file()
+        import json
+        data = json.loads(config_file.read_text(encoding="utf-8"))
+        assert data == {"auto": "saved"}
+
+    def test_auto_save_on_clear(self, temp_config_dir):
+        pc = PluginConfig("test-plugin", config_dir=temp_config_dir, auto_save=True)
+        pc.set("key", "value")
+        pc.clear()
+        config_file = temp_config_dir / "config.json"
+        import json
+        data = json.loads(config_file.read_text(encoding="utf-8"))
+        assert data == {}
+
+    def test_auto_save_on_update(self, temp_config_dir):
+        pc = PluginConfig("test-plugin", config_dir=temp_config_dir, auto_save=True)
+        pc.update({"a": 1, "b": 2})
+        config_file = temp_config_dir / "config.json"
+        import json
+        data = json.loads(config_file.read_text(encoding="utf-8"))
+        assert data == {"a": 1, "b": 2}
+
+    def test_save_no_config_dir_no_error(self):
+        pc = PluginConfig("test-plugin", auto_save=False)
+        pc.set("key", "value")
+        pc.save()
+
+    def test_load_no_config_dir_no_error(self):
+        pc = PluginConfig("test-plugin")
+        pc.load()
+
+    def test_reload_no_config_dir_no_error(self):
+        pc = PluginConfig("test-plugin")
+        pc.reload()
+
+    def test_persistence_isolation(self, temp_config_dir):
+        dir_a = temp_config_dir / "plugin-a"
+        dir_b = temp_config_dir / "plugin-b"
+        pc_a = PluginConfig("a", config_dir=dir_a, auto_save=True)
+        pc_b = PluginConfig("b", config_dir=dir_b, auto_save=True)
+        pc_a.set("shared", "from-a")
+        pc_b.set("shared", "from-b")
+        pc_a2 = PluginConfig("a", config_dir=dir_a, auto_save=False)
+        pc_a2.load()
+        pc_b2 = PluginConfig("b", config_dir=dir_b, auto_save=False)
+        pc_b2.load()
+        assert pc_a2.get("shared") == "from-a"
+        assert pc_b2.get("shared") == "from-b"
+
+
+class TestPluginConfigUpdate:
+    """Batch updates."""
+
+    def test_update_adds_multiple_keys(self):
+        pc = PluginConfig("test-plugin", auto_save=False)
+        pc.update({"a": 1, "b": 2, "c": 3})
+        assert pc.all() == {"a": 1, "b": 2, "c": 3}
+
+    def test_update_overwrites_existing(self):
+        pc = PluginConfig("test-plugin", auto_save=False)
+        pc.set("a", "old")
+        pc.update({"a": "new", "b": "added"})
+        assert pc.get("a") == "new"
+        assert pc.get("b") == "added"
+
+    def test_update_merges_with_existing(self):
+        pc = PluginConfig("test-plugin", auto_save=False)
+        pc.set("existing", "keep")
+        pc.update({"new": "value"})
+        assert pc.get("existing") == "keep"
+        assert pc.get("new") == "value"
+
+
+class TestPluginConfigValidation:
+    """Schema-based validation."""
+
+    def test_validate_no_schema(self):
+        pc = PluginConfig("test-plugin")
+        assert pc.validate() == []
+
+    def test_validate_required_fields(self):
+        schema = {
+            "type": "object",
+            "required": ["host", "port"],
+            "properties": {
+                "host": {"type": "string"},
+                "port": {"type": "integer"},
+            },
+        }
+        pc = PluginConfig("test-plugin", schema=schema)
+        pc.set("host", "localhost")
+        errors = pc.validate()
+        assert len(errors) == 1
+        assert "port" in errors[0]
+
+    def test_validate_type_mismatch(self):
+        schema = {
+            "properties": {
+                "port": {"type": "integer"},
+            },
+        }
+        pc = PluginConfig("test-plugin", schema=schema)
+        pc.set("port", "not-a-number")
+        errors = pc.validate()
+        assert len(errors) == 1
+        assert "port" in errors[0]
+
+    def test_validate_passes(self):
+        schema = {
+            "required": ["name"],
+            "properties": {
+                "name": {"type": "string"},
+                "count": {"type": "integer"},
+            },
+        }
+        pc = PluginConfig("test-plugin", schema=schema)
+        pc.set("name", "test")
+        pc.set("count", 42)
+        assert pc.validate() == []
+
+    def test_validate_data_arg(self):
+        schema = {
+            "required": ["key"],
+            "properties": {"key": {"type": "string"}},
+        }
+        pc = PluginConfig("test-plugin", schema=schema)
+        errors = pc.validate({"key": 123})
+        assert len(errors) == 1
+
+    def test_type_match_string(self):
+        assert PluginConfig._type_match("hello", "string")
+        assert not PluginConfig._type_match(42, "string")
+
+    def test_type_match_integer(self):
+        assert PluginConfig._type_match(42, "integer")
+        assert not PluginConfig._type_match("42", "integer")
+
+    def test_type_match_number(self):
+        assert PluginConfig._type_match(3.14, "number")
+        assert PluginConfig._type_match(42, "number")
+        assert not PluginConfig._type_match("nan", "number")
+
+    def test_type_match_boolean(self):
+        assert PluginConfig._type_match(True, "boolean")
+        assert not PluginConfig._type_match(1, "boolean")
+
+    def test_type_match_array(self):
+        assert PluginConfig._type_match([1, 2], "array")
+        assert not PluginConfig._type_match("not-array", "array")
+
+    def test_type_match_object(self):
+        assert PluginConfig._type_match({"a": 1}, "object")
+        assert not PluginConfig._type_match("not-obj", "object")
+
+    def test_type_match_unknown_type(self):
+        assert PluginConfig._type_match("anything", "unknown_type")
+
+    def test_validate_none_values(self):
+        schema = {
+            "required": ["host"],
+            "properties": {"host": {"type": "string"}},
+        }
+        pc = PluginConfig("test-plugin", schema=schema)
+        pc.set("host", None)
+        errors = pc.validate()
+        assert len(errors) == 1
+
+
+class TestPluginConfigEvents:
+    """Configuration change events."""
+
+    def test_set_publishes_changed_event(self):
+        bus = EventBus()
+        received = []
+        bus.subscribe("plugin.config.changed", lambda d: received.append(d))
+        pc = PluginConfig("test-plugin", event_bus=bus, auto_save=False)
+        pc.set("key", "value")
+        assert len(received) == 1
+        assert received[0]["plugin"] == "test-plugin"
+        assert received[0]["key"] == "value"
+
+    def test_clear_publishes_changed_event(self):
+        bus = EventBus()
+        received = []
+        bus.subscribe("plugin.config.changed", lambda d: received.append(d))
+        pc = PluginConfig("test-plugin", event_bus=bus, auto_save=False)
+        pc.clear()
+        assert len(received) == 1
+
+    def test_update_publishes_changed_event(self):
+        bus = EventBus()
+        received = []
+        bus.subscribe("plugin.config.changed", lambda d: received.append(d))
+        pc = PluginConfig("test-plugin", event_bus=bus, auto_save=False)
+        pc.update({"a": 1, "b": 2})
+        assert len(received) == 1
+        assert received[0]["a"] == 1
+        assert received[0]["b"] == 2
+
+    def test_load_publishes_loaded_event(self):
+        bus = EventBus()
+        received = []
+        bus.subscribe("plugin.config.loaded", lambda d: received.append(d))
+        pc = PluginConfig("test-plugin", event_bus=bus, config_dir=Path(tempfile.gettempdir()) / f"_p10_test_load_{id(bus)}")
+        pc.load()
+        assert len(received) == 1
+        assert received[0]["plugin"] == "test-plugin"
+
+    def test_save_publishes_saved_event(self, temp_config_dir):
+        bus = EventBus()
+        received = []
+        bus.subscribe("plugin.config.saved", lambda d: received.append(d))
+        pc = PluginConfig("test-plugin", event_bus=bus, config_dir=temp_config_dir, auto_save=False)
+        pc.set("key", "value")
+        pc.save()
+        assert len(received) == 1
+        assert "path" in received[0]
+
+    def test_reload_publishes_reloaded_event(self, temp_config_dir):
+        bus = EventBus()
+        received = []
+        bus.subscribe("plugin.config.reloaded", lambda d: received.append(d))
+        config_file = temp_config_dir / "config.json"
+        config_file.parent.mkdir(parents=True, exist_ok=True)
+        config_file.write_text('{}', encoding="utf-8")
+        pc = PluginConfig("test-plugin", event_bus=bus, config_dir=temp_config_dir)
+        pc.reload()
+        assert len(received) == 1
+        assert received[0]["plugin"] == "test-plugin"
+
+    def test_no_event_bus_no_error(self):
+        pc = PluginConfig("test-plugin", auto_save=False)
+        pc.set("key", "value")
+        pc.save()
+        pc.load()
+        pc.reload()
+
+    def test_event_contains_plugin_name(self):
+        bus = EventBus()
+        received = []
+        bus.subscribe("plugin.config.changed", lambda d: received.append(d))
+        pc = PluginConfig("my-plugin", event_bus=bus, auto_save=False)
+        pc.set("x", 1)
+        assert received[0]["plugin"] == "my-plugin"
+
+
+class TestPluginConfigCoreConfig:
+    """Read-only core configuration access."""
+
+    def test_core_config_accessible(self):
+        ctx = PluginContext(None, "test")
+        assert ctx.core_config is not None
+
+    def test_core_config_readonly_values(self):
+        ctx = PluginContext(None, "test")
+        assert hasattr(ctx.core_config, "VERSION")
+        assert hasattr(ctx.core_config, "APP_NAME")
+        assert hasattr(ctx.core_config, "DATA_DIR")
+
+    def test_core_config_cannot_write(self):
+        ctx = PluginContext(None, "test")
+        with pytest.raises(AttributeError):
+            ctx.core_config.VERSION = "99.99.99"
+
+
+class TestPluginContextConfigMethods:
+    """PluginContext convenience methods for config lifecycle."""
+
+    def test_load_config_no_error(self):
+        ctx = PluginContext(None, "test")
+        ctx.load_config()
+
+    def test_save_config_no_error(self):
+        ctx = PluginContext(None, "test")
+        ctx.save_config()
+
+    def test_reload_config_no_error(self):
+        ctx = PluginContext(None, "test")
+        ctx.reload_config()
+
+
+class TestPluginManagerConfigLifecycle:
+    """PluginManager config lifecycle integration."""
+
+    def test_load_sets_schema_from_manifest(self):
+        from app.plugins.sdk import PluginManifest
+        class ConfigPlugin(Plugin):
+            name = "config-test"
+            version = "1.0.0"
+            manifest = PluginManifest(
+                name="config-test",
+                version="1.0.0",
+                config_schema={
+                    "properties": {
+                        "host": {"type": "string", "default": "localhost"},
+                    },
+                },
+            )
+
+        mgr = PluginManager()
+        mgr.register(ConfigPlugin())
+        mgr.load("config-test")
+        plugin = mgr.get_plugin("config-test")
+        assert plugin is not None
+        assert plugin.context is not None
+        assert plugin.context.config.schema is not None
+        assert plugin.context.config.get("host") == "localhost"
+
+    def test_unload_saves_config(self, temp_config_dir):
+        from app.core.config import Config
+        original_data_dir = Config.DATA_DIR
+        try:
+            Config.DATA_DIR = temp_config_dir
+            plugin_name = "save-on-unload"
+            manifest = PluginManifest(name=plugin_name, version="1.0.0")
+            class SavePlugin(Plugin):
+                name = plugin_name
+                version = "1.0.0"
+
+            mgr = PluginManager()
+            mgr.register(SavePlugin(), manifest)
+            mgr.load(plugin_name)
+            plugin = mgr.get_plugin(plugin_name)
+            assert plugin is not None
+            assert plugin.context is not None
+            plugin.context.config.set("saved-key", "saved-value")
+            mgr.unload(plugin_name, remove=True)
+            config_path = temp_config_dir / "plugins" / plugin_name / "config.json"
+            assert config_path.is_file()
+            import json
+            data = json.loads(config_path.read_text(encoding="utf-8"))
+            assert data.get("saved-key") == "saved-value"
+        finally:
+            Config.DATA_DIR = original_data_dir
+
+    def test_manifest_without_config_schema(self):
+        mgr = PluginManager()
+        class NoSchemaPlugin(Plugin):
+            name = "no-schema"
+            version = "1.0.0"
+
+        mgr.register(NoSchemaPlugin())
+        mgr.load("no-schema")
+        plugin = mgr.get_plugin("no-schema")
+        assert plugin is not None
+        assert plugin.context is not None
+        assert plugin.context.config.schema is None
+
+
+class TestPluginConfigFailureIsolation:
+    """Graceful failure handling."""
+
+    def test_invalid_json_on_load(self, temp_config_dir):
+        config_file = temp_config_dir / "config.json"
+        config_file.parent.mkdir(parents=True, exist_ok=True)
+        config_file.write_text("not valid json", encoding="utf-8")
+        pc = PluginConfig("test-plugin", config_dir=temp_config_dir)
+        pc.load()
+        assert pc.loaded
+
+    def test_save_failure_no_crash(self):
+        pc = PluginConfig("test-plugin", auto_save=False)
+        pc.save()
+
+    def test_reload_failure_no_crash(self):
+        pc = PluginConfig("test-plugin")
+        pc.reload()
+
+
+class TestPluginConfigNamespaceIsolation:
+    """Config isolation between plugins."""
+
+    def test_isolation_via_separate_instances(self):
+        pc1 = PluginConfig("plugin-a", auto_save=False)
+        pc2 = PluginConfig("plugin-b", auto_save=False)
+        pc1.set("key", "from-a")
+        pc2.set("key", "from-b")
+        assert pc1.get("key") == "from-a"
+        assert pc2.get("key") == "from-b"
+        assert pc1.all() != pc2.all() or pc1.all() == {}
+
+    def test_isolation_via_context(self):
+        ctx_a = PluginContext(None, "plugin-a")
+        ctx_b = PluginContext(None, "plugin-b")
+        ctx_a.config.set("shared", "a")
+        ctx_b.config.set("shared", "b")
+        assert ctx_a.config.get("shared") == "a"
+        assert ctx_b.config.get("shared") == "b"
+
+    def test_shutdown_all_isolated(self):
+        from app.core.config import Config
+        import tempfile
+        original = Config.DATA_DIR
+        try:
+            Config.DATA_DIR = Path(tempfile.mkdtemp())
+            mgr = PluginManager()
+            class P1(Plugin):
+                name = "plugin-1"
+                version = "1.0.0"
+            class P2(Plugin):
+                name = "plugin-2"
+                version = "1.0.0"
+            for p in [P1(), P2()]:
+                mgr.register(p)
+                mgr.load(p.name)
+                p.context.config.set("isolated", p.name)
+            mgr.shutdown_all()
+            assert mgr.list_plugins() == []
+        finally:
+            Config.DATA_DIR = original
+
+
+class TestPluginConfigBackwardCompat:
+    """Existing PluginConfig API continues to work."""
+
+    def test_get_set(self):
+        pc = PluginConfig("test")
+        pc.set("key1", "value1")
+        assert pc.get("key1") == "value1"
+
+    def test_get_default(self):
+        pc = PluginConfig("test")
+        assert pc.get("nonexistent", "default") == "default"
+
+    def test_get_default_none(self):
+        pc = PluginConfig("test")
+        assert pc.get("nonexistent") is None
+
+    def test_all_returns_copy(self):
+        pc = PluginConfig("test")
+        pc.set("a", 1)
+        pc.set("b", 2)
+        data = pc.all()
+        assert data == {"a": 1, "b": 2}
+
+    def test_clear(self):
+        pc = PluginConfig("test")
+        pc.set("key", "value")
+        pc.clear()
+        assert pc.get("key") is None
+
+    def test_overwrite(self):
+        pc = PluginConfig("test")
+        pc.set("key", "old")
+        pc.set("key", "new")
+        assert pc.get("key") == "new"
+
+    def test_importable_from_app_plugins(self):
+        from app.plugins import PluginConfig as PC
+        assert PC is PluginConfig
