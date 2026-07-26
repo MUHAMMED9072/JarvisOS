@@ -106,13 +106,13 @@ def _save_installed_meta(meta: dict[str, dict[str, Any]]) -> None:
     )
 
 
-def _compute_hash(path: Path) -> str:
+def compute_hash(path: Path) -> str:
     h = hashlib.sha256()
     h.update(path.read_bytes())
     return h.hexdigest()
 
 
-def _load_manifest_from_zip(zf: zipfile.ZipFile) -> PluginManifest:
+def load_manifest_from_zip(zf: zipfile.ZipFile) -> PluginManifest:
     for name in ("plugin.json", "manifest.json"):
         if name in zf.namelist():
             data = json.loads(zf.read(name))
@@ -157,9 +157,9 @@ class PackageManager:
         if not path.is_file():
             raise PackageNotFoundError(f"Package not found: {path}")
         try:
-            file_hash = _compute_hash(path)
+            file_hash = compute_hash(path)
             with zipfile.ZipFile(path, "r") as zf:
-                manifest = _load_manifest_from_zip(zf)
+                manifest = load_manifest_from_zip(zf)
             errs = validate_manifest(manifest)
             return PluginPackage(
                 name=manifest.name,

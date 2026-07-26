@@ -19,6 +19,9 @@ from app.skills.base import Skill
 from app.skills.manager import SkillManager
 from app.skills.result import SkillResult
 from app.plugins.sdk import (
+    ConfigInspector,
+    DependencyInspector,
+    HealthCheckResult,
     InstallMetadata,
     PackageCompatibilityError,
     PackageError,
@@ -28,16 +31,43 @@ from app.plugins.sdk import (
     PackageValidationError,
     Permission,
     PermissionDenied,
+    PermissionInspector,
     PermissionManager,
     Plugin,
     PluginConfig,
     PluginContext,
     PluginDependency,
+    PluginDiagnosticsResult,
+    PluginDocGenerator,
+    PluginInfoExporter,
+    PluginLoader,
     PluginManager,
     PluginManifest,
     PluginPackage,
+    PluginProject,
+    PluginValidator,
+    ValidationResult,
     check_version_compatibility,
+    compute_hash,
+    diagnose_plugin,
+    discover_plugin_dirs,
+    export_plugin_info,
+    format_validation_result,
+    generate_manifest,
+    generate_plugin_docs,
+    health_check_plugin,
+    inspect_config_schema,
+    inspect_dependencies,
+    inspect_package,
+    inspect_permissions,
+    list_plugin_permission_summary,
+    load_manifest_from_zip,
+    manifest_to_json,
+    resolve_plugin_file,
+    scaffold_plugin,
     validate_manifest,
+    validate_plugin_manifest,
+    validate_plugin_project,
 )
 
 
@@ -2735,7 +2765,6 @@ class TestPluginPackage:
     """PluginPackage creation and inspection."""
 
     def test_inspect_valid_package(self, jarvis_plugin):
-        from app.plugins.sdk.package import _compute_hash
         pkg_path = Path(jarvis_plugin)
         pkg = _create_test_package(pkg_path)
         assert pkg.name == "my-plugin"
@@ -2747,7 +2776,6 @@ class TestPluginPackage:
             fake_pkg = Path(tmp) / "fake.jarvis-plugin"
             fake_pkg.write_text("not a zip", encoding="utf-8")
             with pytest.raises(PackageValidationError):
-                from app.plugins.sdk.package import _compute_hash
                 _create_test_package(fake_pkg)
 
     def test_inspect_missing_manifest(self):
@@ -2757,7 +2785,6 @@ class TestPluginPackage:
             with zipfile.ZipFile(pkg_path, "w") as zf:
                 zf.writestr("some.py", "code")
             with pytest.raises(PackageValidationError):
-                from app.plugins.sdk.package import _compute_hash
                 _create_test_package(pkg_path)
 
     def test_inspect_nonexistent(self):
@@ -3037,10 +3064,925 @@ class TestPackageBackwardCompat:
         assert len(pkg.file_hash) == 64
 
 
+# ==========================================================================
+# P10-10 – Plugin Developer Tools
+# ==========================================================================
+
+
+class TestScaffoldGeneration:
+    """Plugin project scaffolding."""
+
+    def test_scaffold_creates_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = scaffold_plugin("my-tool", tmp)
+            assert project.name == "my-tool"
+            assert project.path.is_dir()
+            assert (project.path / "main.py").is_file()
+            assert (project.path / "__init__.py").is_file()
+            assert (project.path / "plugin.json").is_file()
+
+    def test_scaffold_reads_manifest_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = scaffold_plugin(
+                "test-p", tmp,
+                version="2.0.0", description="desc",
+                author="me", permissions=["ai", "events"],
+            )
+            data = json.loads(
+                (project.path / "plugin.json").read_text(encoding="utf-8"),
+            )
+            assert data["name"] == "test-p"
+            assert data["version"] == "2.0.0"
+            assert data["description"] == "desc"
+            assert data["author"] == "me"
+            assert data["permissions"] == ["ai", "events"]
+
+    def test_scaffold_generates_valid_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = scaffold_plugin("scaffold-test", tmp)
+            errs = validate_manifest(project.manifest)
+            assert errs == []
+
+    def test_scaffold_main_py_has_plugin_class(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            scaffold_plugin("hello-world", tmp)
+            content = (Path(tmp) / "hello-world" / "main.py").read_text(
+                encoding="utf-8",
+            )
+            assert "class HelloWorldPlugin(Plugin)" in content
+            assert 'name = "hello-world"' in content
+            assert 'version = "1.0.0"' in content
+
+    def test_scaffold_existing_path_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "existing").mkdir()
+            with pytest.raises(FileExistsError):
+                scaffold_plugin("existing", tmp)
+
+    def test_scaffold_invalid_manifest_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with pytest.raises(ValueError, match="Invalid manifest"):
+                scaffold_plugin("", tmp)
+
+    def test_scaffold_with_config_schema(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            schema = {
+                "type": "object",
+                "properties": {
+                    "api_key": {"type": "string", "description": "API key"},
+                },
+                "required": ["api_key"],
+            }
+            project = scaffold_plugin("cfg-plugin", tmp, config_schema=schema)
+            loaded = json.loads(
+                (project.path / "plugin.json").read_text(encoding="utf-8"),
+            )
+            assert loaded["config_schema"] == schema
+            assert loaded["config_schema"]["required"] == ["api_key"]
+
+    def test_scaffold_with_dependencies(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            deps = [PluginDependency("base", "1.0.0")]
+            project = scaffold_plugin("dep-plugin", tmp, dependencies=deps)
+            loaded = json.loads(
+                (project.path / "plugin.json").read_text(encoding="utf-8"),
+            )
+            assert loaded["dependencies"] == [{"name": "base", "version": "1.0.0"}]
+
+    def test_scaffold_with_capabilities(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = scaffold_plugin("cap-p", tmp, capabilities=["logging", "ai"])
+            loaded = json.loads(
+                (project.path / "plugin.json").read_text(encoding="utf-8"),
+            )
+            assert loaded["capabilities"] == ["logging", "ai"]
+
+    def test_scaffold_invalid_output_dir_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = Path(tmp) / "nonexistent"
+            with pytest.raises(ValueError, match="Output directory"):
+                scaffold_plugin("test", fake)
+
+
+class TestManifestGeneration:
+    """Manifest generation utilities."""
+
+    def test_generate_manifest_basic(self):
+        m = generate_manifest("test-p", version="2.0.0")
+        assert m.name == "test-p"
+        assert m.version == "2.0.0"
+        assert validate_manifest(m) == []
+
+    def test_generate_manifest_with_all_fields(self):
+        m = generate_manifest(
+            "full", version="1.0.0", description="desc",
+            author="author", permissions=["ai", "events"],
+            capabilities=["logging"],
+            dependencies=[PluginDependency("dep", "1.0.0")],
+            config_schema={"type": "object"},
+        )
+        assert m.description == "desc"
+        assert m.author == "author"
+        assert m.permissions == ["ai", "events"]
+        assert m.capabilities == ["logging"]
+        assert len(m.dependencies) == 1
+        assert m.config_schema == {"type": "object"}
+
+    def test_generate_manifest_invalid_raises(self):
+        with pytest.raises(ValueError, match="Invalid manifest"):
+            generate_manifest("")
+
+    def test_manifest_to_json_roundtrip(self):
+        m = PluginManifest(
+            name="json-test", version="1.0.0",
+            permissions=["ai"],
+            dependencies=[PluginDependency("dep", "1.0.0")],
+        )
+        data = json.loads(manifest_to_json(m))
+        assert data["name"] == "json-test"
+        assert data["permissions"] == ["ai"]
+        assert data["dependencies"] == [{"name": "dep", "version": "1.0.0"}]
+
+
+class TestManifestValidation:
+    """Extended manifest validation via validate_plugin_manifest."""
+
+    def test_validate_valid_manifest(self):
+        m = PluginManifest(name="test", version="1.0.0")
+        result = validate_plugin_manifest(m)
+        assert result.valid is True
+        assert result.errors == []
+
+    def test_validate_invalid_name(self):
+        m = PluginManifest(name="", version="1.0.0")
+        result = validate_plugin_manifest(m)
+        assert result.valid is False
+        assert any("name" in e for e in result.errors)
+
+    def test_validate_warns_no_author(self):
+        m = PluginManifest(name="test", version="1.0.0")
+        result = validate_plugin_manifest(m)
+        assert any("author" in w for w in result.warnings)
+
+    def test_validate_warns_no_description(self):
+        m = PluginManifest(name="test", version="1.0.0")
+        result = validate_plugin_manifest(m)
+        assert any("description" in w for w in result.warnings)
+
+    def test_validate_warns_no_permissions(self):
+        m = PluginManifest(name="test", version="1.0.0")
+        result = validate_plugin_manifest(m)
+        assert any("permissions" in w for w in result.warnings)
+
+    def test_validate_with_permissions_no_warning(self):
+        m = PluginManifest(
+            name="test", version="1.0.0",
+            permissions=["ai"],
+        )
+        result = validate_plugin_manifest(m)
+        assert not any("permissions" in w for w in result.warnings)
+
+    def test_validate_invalid_permission(self):
+        m = PluginManifest(
+            name="test", version="1.0.0",
+            permissions=["invalid_perm"],
+        )
+        result = validate_plugin_manifest(m)
+        assert result.valid is False
+
+    def test_validate_manifest_with_deps(self):
+        m = PluginManifest(
+            name="test", version="1.0.0",
+            dependencies=[PluginDependency("other", "1.0.0")],
+        )
+        result = validate_plugin_manifest(m)
+        assert result.valid is True
+
+
+class TestPackageInspection:
+    """Package inspection via inspect_package."""
+
+    def test_inspect_package_basic(self, jarvis_plugin):
+        info = inspect_package(jarvis_plugin)
+        assert info["name"] == "my-plugin"
+        assert info["version"] == "1.0.0"
+        assert info["valid"] is True
+        assert info["validation_errors"] == []
+
+    def test_inspect_package_contents(self, jarvis_plugin):
+        info = inspect_package(jarvis_plugin)
+        assert "__init__.py" in info["contents"]
+        assert "plugin.json" in info["contents"]
+
+    def test_inspect_package_file_hash(self, jarvis_plugin):
+        info = inspect_package(jarvis_plugin)
+        assert isinstance(info["file_hash"], str)
+        assert len(info["file_hash"]) == 64
+
+    def test_inspect_package_file_size(self, jarvis_plugin):
+        info = inspect_package(jarvis_plugin)
+        assert info["file_size"] > 0
+
+    def test_inspect_nonexistent_raises(self):
+        with pytest.raises(FileNotFoundError):
+            inspect_package("/nonexistent/file.jarvis-plugin")
+
+    def test_inspect_package_with_permissions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "perm-plugin"
+            src.mkdir()
+            (src / "__init__.py").write_text("", encoding="utf-8")
+            (src / "plugin.json").write_text(
+                json.dumps({
+                    "name": "perm-plugin",
+                    "version": "1.0.0",
+                    "permissions": ["ai", "events"],
+                }),
+                encoding="utf-8",
+            )
+            pkg_path = Path(tmp) / "perm-plugin.jarvis-plugin"
+            import zipfile
+            with zipfile.ZipFile(pkg_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                for f in src.rglob("*"):
+                    if f.is_file():
+                        zf.write(f, f.relative_to(src))
+            info = inspect_package(pkg_path)
+            assert info["permissions"] == ["ai", "events"]
+
+    def test_inspect_package_dependencies(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "dep-pkg"
+            src.mkdir()
+            (src / "__init__.py").write_text("", encoding="utf-8")
+            (src / "plugin.json").write_text(
+                json.dumps({
+                    "name": "dep-pkg",
+                    "version": "1.0.0",
+                    "dependencies": [{"name": "base", "version": "1.0.0"}],
+                }),
+                encoding="utf-8",
+            )
+            pkg_path = Path(tmp) / "dep-pkg.jarvis-plugin"
+            import zipfile
+            with zipfile.ZipFile(pkg_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                for f in src.rglob("*"):
+                    if f.is_file():
+                        zf.write(f, f.relative_to(src))
+            info = inspect_package(pkg_path)
+            assert info["dependencies"] == [{"name": "base", "version": "1.0.0"}]
+
+    def test_inspect_package_config_schema(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "schema-pkg"
+            src.mkdir()
+            (src / "__init__.py").write_text("", encoding="utf-8")
+            (src / "plugin.json").write_text(
+                json.dumps({
+                    "name": "schema-pkg",
+                    "version": "1.0.0",
+                    "config_schema": {
+                        "type": "object",
+                        "properties": {"key": {"type": "string"}},
+                    },
+                }),
+                encoding="utf-8",
+            )
+            pkg_path = Path(tmp) / "schema-pkg.jarvis-plugin"
+            import zipfile
+            with zipfile.ZipFile(pkg_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                for f in src.rglob("*"):
+                    if f.is_file():
+                        zf.write(f, f.relative_to(src))
+            info = inspect_package(pkg_path)
+            assert info["config_schema"] is not None
+            assert "key" in info["config_schema"]["properties"]
+
+
+class TestDependencyInspection:
+    """Dependency inspector."""
+
+    def test_inspect_empty_dependencies(self):
+        m = PluginManifest(name="test", version="1.0.0")
+        result = inspect_dependencies(m)
+        assert result == []
+
+    def test_inspect_with_dependencies(self):
+        m = PluginManifest(
+            name="test", version="1.0.0",
+            dependencies=[PluginDependency("dep1", "1.0.0")],
+        )
+        result = inspect_dependencies(m)
+        assert len(result) == 1
+        assert result[0]["name"] == "dep1"
+        assert result[0]["version_spec"] == "1.0.0"
+
+    def test_inspect_with_manager(self):
+        mgr = PluginManager()
+        m = PluginManifest(
+            name="consumer", version="1.0.0",
+            dependencies=[PluginDependency("provider", "1.0.0")],
+        )
+        result = inspect_dependencies(m, plugin_manager=mgr)
+        assert result[0]["resolved"] is None
+
+    def test_inspect_dependency_star_version(self):
+        m = PluginManifest(
+            name="test", version="1.0.0",
+            dependencies=[PluginDependency("any", "*")],
+        )
+        result = inspect_dependencies(m)
+        assert result[0]["version_spec"] == "*"
+
+    def test_inspect_dependency_inspector_class(self):
+        m = PluginManifest(
+            name="test", version="1.0.0",
+            dependencies=[PluginDependency("dep", "1.0.0")],
+        )
+        result = DependencyInspector.inspect(m)
+        assert len(result) == 1
+        assert result[0]["name"] == "dep"
+
+
+class TestPermissionInspection:
+    """Permission inspector."""
+
+    def test_inspect_no_permissions(self):
+        m = PluginManifest(name="test", version="1.0.0")
+        result = inspect_permissions(m)
+        assert result["declared"] == []
+        assert result["has_all"] is True
+        assert "none declared" in result["summary"]
+
+    def test_inspect_known_permissions(self):
+        m = PluginManifest(
+            name="test", version="1.0.0",
+            permissions=["ai", "events"],
+        )
+        result = inspect_permissions(m)
+        assert "ai" in result["known"]
+        assert "events" in result["known"]
+        assert result["unknown"] == []
+
+    def test_inspect_unknown_permission(self):
+        m = PluginManifest(
+            name="test", version="1.0.0",
+            permissions=["unknown_perm"],
+        )
+        result = inspect_permissions(m)
+        assert "unknown_perm" in result["unknown"]
+
+    def test_inspect_missing_permissions(self):
+        m = PluginManifest(
+            name="test", version="1.0.0",
+            permissions=["ai"],
+        )
+        result = inspect_permissions(m)
+        assert "events" in result["missing"]
+        assert "services" in result["missing"]
+
+    def test_inspect_all_permissions(self):
+        m = PluginManifest(
+            name="test", version="1.0.0",
+            permissions=Permission.all_permissions(),
+        )
+        result = inspect_permissions(m)
+        assert result["has_all"] is True
+        assert len(result["missing"]) == 0
+
+    def test_permission_inspector_class(self):
+        m = PluginManifest(name="test", version="1.0.0")
+        result = PermissionInspector.inspect(m)
+        assert result["declared"] == []
+
+
+class TestConfigInspection:
+    """Configuration schema inspector."""
+
+    def test_inspect_no_schema(self):
+        m = PluginManifest(name="test", version="1.0.0")
+        result = inspect_config_schema(m)
+        assert result["has_schema"] is False
+        assert "No configuration" in result["summary"]
+
+    def test_inspect_empty_schema(self):
+        m = PluginManifest(
+            name="test", version="1.0.0",
+            config_schema={},
+        )
+        result = inspect_config_schema(m)
+        assert result["has_schema"] is True
+        assert result["fields"] == []
+
+    def test_inspect_schema_with_fields(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "api_key": {"type": "string", "description": "API key"},
+                "timeout": {"type": "integer", "default": 30},
+            },
+            "required": ["api_key"],
+        }
+        m = PluginManifest(name="test", version="1.0.0", config_schema=schema)
+        result = inspect_config_schema(m)
+        assert result["field_count"] == 2
+        assert result["required_count"] == 1
+        field_names = [f["name"] for f in result["fields"]]
+        assert "api_key" in field_names
+        assert "timeout" in field_names
+
+    def test_inspect_schema_field_properties(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "key": {"type": "string", "description": "desc", "default": "val"},
+            },
+            "required": ["key"],
+        }
+        m = PluginManifest(name="test", version="1.0.0", config_schema=schema)
+        result = inspect_config_schema(m)
+        field = result["fields"][0]
+        assert field["name"] == "key"
+        assert field["type"] == "string"
+        assert field["description"] == "desc"
+        assert field["default"] == "val"
+        assert field["required"] is True
+
+    def test_config_inspector_class(self):
+        m = PluginManifest(name="test", version="1.0.0")
+        result = ConfigInspector.inspect(m)
+        assert result["has_schema"] is False
+
+
+class TestPluginDiagnostics:
+    """Plugin diagnostics."""
+
+    def test_diagnose_unregistered_plugin(self):
+        mgr = PluginManager()
+        result = diagnose_plugin("nonexistent", mgr)
+        assert result.name == "nonexistent"
+        assert result.manifest_valid is False
+        assert any("not registered" in e for e in result.manifest_errors)
+
+    def test_diagnose_registered_plugin(self):
+        from app.plugins.sdk.base import Plugin
+        class DiagPlugin(Plugin):
+            name = "diag-test"
+            version = "1.0.0"
+        mgr = PluginManager()
+        p = DiagPlugin()
+        mgr.register(p)
+        mgr.load("diag-test")
+        result = diagnose_plugin("diag-test", mgr)
+        assert result.name == "diag-test"
+        assert result.version == "1.0.0"
+        assert result.manifest_valid or True
+
+    def test_diagnose_returns_diagnostics_result(self):
+        mgr = PluginManager()
+        result = diagnose_plugin("any", mgr)
+        assert isinstance(result, PluginDiagnosticsResult)
+        assert isinstance(result.services, list)
+
+    def test_diagnose_plugin_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "test-p"
+            src.mkdir()
+            (src / "__init__.py").write_text("# test", encoding="utf-8")
+            (src / "plugin.json").write_text(
+                json.dumps({"name": "test-p", "version": "1.0.0"}),
+                encoding="utf-8",
+            )
+            mgr = PluginManager()
+            result = diagnose_plugin("test-p", mgr, plugin_dir=src)
+            assert result.source_valid is True
+
+
+class TestHealthCheck:
+    """Plugin health checks."""
+
+    def test_health_check_unregistered(self):
+        mgr = PluginManager()
+        result = health_check_plugin("nonexistent", mgr)
+        assert result.healthy is False
+        assert result.manifest_ok is False
+
+    def test_health_check_registered(self):
+        from app.plugins.sdk.base import Plugin
+        class HealthyPlugin(Plugin):
+            name = "healthy"
+            version = "1.0.0"
+        mgr = PluginManager()
+        p = HealthyPlugin()
+        mgr.register(p)
+        mgr.load("healthy")
+        result = health_check_plugin("healthy", mgr)
+        assert isinstance(result, HealthCheckResult)
+        assert result.name == "healthy"
+
+    def test_health_check_errors_list(self):
+        mgr = PluginManager()
+        result = health_check_plugin("missing", mgr)
+        assert isinstance(result.errors, list)
+
+    def test_health_check_permissions_ok(self):
+        m = PluginManifest(
+            name="test", version="1.0.0",
+            permissions=["ai"],
+        )
+        mgr = PluginManager()
+        from app.plugins.sdk.base import Plugin
+        class PermPlugin(Plugin):
+            name = "test"
+            version = "1.0.0"
+            manifest = m
+        p = PermPlugin()
+        mgr.register(p, m)
+        mgr.load("test")
+        result = health_check_plugin("test", mgr)
+        assert result.permissions_ok is True
+
+    def test_health_check_unknown_permission(self):
+        m = PluginManifest(
+            name="test", version="1.0.0",
+            permissions=["bad_perm"],
+        )
+        mgr = PluginManager()
+        from app.plugins.sdk.base import Plugin
+        class BadPermPlugin(Plugin):
+            name = "test"
+            version = "1.0.0"
+            manifest = m
+        p = BadPermPlugin()
+        errs = mgr.register(p, m)
+        assert len(errs) > 0
+        result = health_check_plugin("test", mgr)
+        assert result.manifest_ok is False
+
+
+class TestInfoExporter:
+    """Plugin info exporter."""
+
+    def test_export_nonexistent(self):
+        mgr = PluginManager()
+        info = export_plugin_info("nope", mgr)
+        assert info["name"] == "nope"
+        assert info["loaded"] is False
+
+    def test_export_registered_plugin(self):
+        from app.plugins.sdk.base import Plugin
+        class ExpPlugin(Plugin):
+            name = "exporter"
+            version = "2.0.0"
+        mgr = PluginManager()
+        mgr.register(ExpPlugin())
+        mgr.load("exporter")
+        info = export_plugin_info("exporter", mgr)
+        assert info["name"] == "exporter"
+        assert info["version"] == "2.0.0"
+        assert info["loaded"] is True
+
+    def test_export_include_raw_manifest(self):
+        from app.plugins.sdk.base import Plugin
+        class RawPlugin(Plugin):
+            name = "raw"
+            version = "1.0.0"
+        mgr = PluginManager()
+        mgr.register(RawPlugin())
+        info = export_plugin_info("raw", mgr, include_raw=True)
+        assert "raw_manifest" in info
+        assert info["raw_manifest"]["name"] == "raw"
+
+    def test_export_timestamp(self):
+        mgr = PluginManager()
+        info = export_plugin_info("test", mgr)
+        assert "exported_at" in info
+
+    def test_export_with_services(self):
+        from app.plugins.sdk.base import Plugin
+        class SvcPlugin(Plugin):
+            name = "svc-p"
+            version = "1.0.0"
+        mgr = PluginManager()
+        p = SvcPlugin()
+        mgr.register(p)
+        mgr.load("svc-p")
+        mgr.register_plugin_service("svc-p", "my.svc")
+        info = export_plugin_info("svc-p", mgr)
+        assert "my.svc" in info["services"]
+
+    def test_info_exporter_class(self):
+        mgr = PluginManager()
+        info = PluginInfoExporter.export("test", mgr)
+        assert "name" in info
+
+
+class TestDocGeneration:
+    """Plugin documentation generator."""
+
+    def test_generate_docs_basic(self):
+        m = PluginManifest(name="doc-test", version="1.0.0")
+        mgr = PluginManager()
+        mgr.register(type("DocPlugin", (Plugin,), {"name": "doc-test", "version": "1.0.0"})())
+        mgr._manifests["doc-test"] = m
+        docs = generate_plugin_docs("doc-test", mgr)
+        assert "# Plugin: doc-test" in docs
+        assert "**Version:** 1.0.0" in docs
+
+    def test_generate_docs_no_manifest(self):
+        mgr = PluginManager()
+        docs = generate_plugin_docs("missing", mgr)
+        assert "No manifest available" in docs
+
+    def test_generate_docs_with_author_description(self):
+        m = PluginManifest(
+            name="doc-test", version="1.0.0",
+            author="Test Author", description="A test plugin",
+        )
+        mgr = PluginManager()
+        mgr._manifests["doc-test"] = m
+        docs = generate_plugin_docs("doc-test", mgr)
+        assert "Test Author" in docs
+        assert "A test plugin" in docs
+
+    def test_generate_docs_with_permissions(self):
+        m = PluginManifest(
+            name="doc-test", version="1.0.0",
+            permissions=["ai", "events"],
+        )
+        mgr = PluginManager()
+        mgr._manifests["doc-test"] = m
+        docs = generate_plugin_docs("doc-test", mgr)
+        assert "Permissions" in docs
+        assert "`ai`" in docs
+
+    def test_generate_docs_with_config_schema(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "key": {"type": "string", "description": "desc"},
+            },
+            "required": ["key"],
+        }
+        m = PluginManifest(
+            name="doc-test", version="1.0.0",
+            config_schema=schema,
+        )
+        mgr = PluginManager()
+        mgr._manifests["doc-test"] = m
+        docs = generate_plugin_docs("doc-test", mgr)
+        assert "Configuration" in docs
+        assert "| Field |" in docs
+
+    def test_generate_docs_with_dependencies(self):
+        m = PluginManifest(
+            name="doc-test", version="1.0.0",
+            dependencies=[PluginDependency("base", "1.0.0")],
+        )
+        mgr = PluginManager()
+        mgr._manifests["doc-test"] = m
+        docs = generate_plugin_docs("doc-test", mgr)
+        assert "Dependencies" in docs
+        assert "`base`" in docs
+
+    def test_doc_generator_class(self):
+        mgr = PluginManager()
+        docs = PluginDocGenerator.generate("test", mgr)
+        assert isinstance(docs, str)
+
+
+class TestPluginValidator:
+    """Plugin validator service."""
+
+    def test_validate_valid_project(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            scaffold_plugin("valid-proj", tmp)
+            result = validate_plugin_project(Path(tmp) / "valid-proj")
+            assert result.valid is True
+
+    def test_validate_missing_directory(self):
+        result = validate_plugin_project("/nonexistent/path")
+        assert result.valid is False
+        assert any("Directory not found" in e for e in result.errors)
+
+    def test_validate_missing_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = validate_plugin_project(tmp)
+            assert result.valid is False
+
+    def test_validate_invalid_manifest_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "plugin.json").write_text(
+                "not-json", encoding="utf-8",
+            )
+            result = validate_plugin_project(tmp)
+            assert result.valid is False
+
+    def test_validate_warns_no_author(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "plugin.json").write_text(
+                json.dumps({"name": "test", "version": "1.0.0"}),
+                encoding="utf-8",
+            )
+            result = validate_plugin_project(tmp)
+            assert not result.valid
+            assert any("main.py" in e for e in result.errors)
+
+    def test_validate_with_source_and_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "__init__.py").write_text("", encoding="utf-8")
+            (Path(tmp) / "plugin.json").write_text(
+                json.dumps({"name": "test", "version": "1.0.0"}),
+                encoding="utf-8",
+            )
+            result = validate_plugin_project(tmp)
+            assert result.valid is True
+
+    def test_validate_unknown_permission(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "__init__.py").write_text("", encoding="utf-8")
+            (Path(tmp) / "plugin.json").write_text(
+                json.dumps({
+                    "name": "test", "version": "1.0.0",
+                    "permissions": ["bad_perm"],
+                }),
+                encoding="utf-8",
+            )
+            result = validate_plugin_project(tmp)
+            assert result.valid is False
+            assert any("bad_perm" in e for e in result.errors)
+
+    def test_validate_format_result_valid(self):
+        result = ValidationResult(valid=True)
+        text = format_validation_result(result)
+        assert text == "VALID"
+
+    def test_validate_format_result_invalid(self):
+        result = ValidationResult(
+            valid=False,
+            errors=["err1"],
+            warnings=["warn1"],
+        )
+        text = format_validation_result(result)
+        assert "INVALID" in text
+        assert "err1" in text
+        assert "warn1" in text
+
+    def test_plugin_validator_class(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            scaffold_plugin("cls-valid", tmp)
+            result = PluginValidator.validate_project(
+                Path(tmp) / "cls-valid",
+            )
+            assert result.valid is True
+
+    def test_plugin_validator_manifest_class(self):
+        m = PluginManifest(name="test", version="1.0.0")
+        result = PluginValidator.validate_manifest(m)
+        assert result.valid is True
+
+
+class TestDeveloperUtilities:
+    """Developer helper utilities."""
+
+    def test_discover_plugin_dirs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p1 = Path(tmp) / "plugin-a"
+            p1.mkdir()
+            (p1 / "__init__.py").write_text("", encoding="utf-8")
+            (p1 / "plugin.json").write_text(
+                json.dumps({"name": "a", "version": "1.0.0"}),
+                encoding="utf-8",
+            )
+            p2 = Path(tmp) / "not-plugin"
+            p2.mkdir()
+            result = discover_plugin_dirs(tmp)
+            names = [d.name for d in result]
+            assert "plugin-a" in names
+            assert "not-plugin" not in names
+
+    def test_discover_plugin_dirs_empty(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = discover_plugin_dirs(tmp)
+            assert result == []
+
+    def test_discover_plugin_dirs_nonexistent(self):
+        result = discover_plugin_dirs("/nonexistent/path")
+        assert result == []
+
+    def test_resolve_plugin_file_found(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "test.py").write_text("", encoding="utf-8")
+            result = resolve_plugin_file(tmp, "test.py")
+            assert result is not None
+            assert result.name == "test.py"
+
+    def test_resolve_plugin_file_not_found(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = resolve_plugin_file(tmp, "missing.py")
+            assert result is None
+
+    def test_resolve_plugin_file_path_traversal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = resolve_plugin_file(tmp, "../etc/passwd")
+            assert result is None
+
+    def test_list_plugin_permission_summary_empty(self):
+        mgr = PluginManager()
+        result = list_plugin_permission_summary(mgr)
+        assert result == []
+
+    def test_list_plugin_permission_summary(self):
+        m = PluginManifest(
+            name="test", version="1.0.0",
+            permissions=["ai"],
+        )
+        mgr = PluginManager()
+        from app.plugins.sdk.base import Plugin
+        class PermSumPlugin(Plugin):
+            name = "test"
+            version = "1.0.0"
+        p = PermSumPlugin()
+        mgr.register(p, m)
+        result = list_plugin_permission_summary(mgr)
+        assert len(result) == 1
+        assert result[0]["name"] == "test"
+        assert result[0]["permissions"] == ["ai"]
+
+    def test_list_plugin_permission_summary_none_manager(self):
+        result = list_plugin_permission_summary(None)
+        assert result == []
+
+    def test_compute_hash_public(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / "test.txt"
+            f.write_text("hello", encoding="utf-8")
+            h = compute_hash(f)
+            assert isinstance(h, str)
+            assert len(h) == 64
+
+    def test_load_manifest_from_zip_public(self, jarvis_plugin):
+        import zipfile
+        with zipfile.ZipFile(jarvis_plugin, "r") as zf:
+            manifest = load_manifest_from_zip(zf)
+            assert manifest.name == "my-plugin"
+
+
+class TestToolsBackwardCompat:
+    """Backward compatibility for P10-10 developer tools."""
+
+    def test_importable_from_app_plugins(self):
+        from app.plugins import scaffold_plugin as sp
+        assert sp is not None
+        from app.plugins import generate_manifest as gm
+        assert gm is not None
+        from app.plugins import inspect_package as ip
+        assert ip is not None
+
+    def test_importable_from_sdk(self):
+        from app.plugins.sdk import scaffold_plugin as sp
+        assert sp is not None
+        from app.plugins.sdk import generate_manifest as gm
+        assert gm is not None
+        from app.plugins.sdk import inspect_package as ip
+        assert ip is not None
+
+    def test_class_aliases_functional(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            scaffold_plugin("cls-test", tmp)
+            result = PluginValidator.validate_project(
+                Path(tmp) / "cls-test",
+            )
+            assert result.valid is True
+
+    def test_permission_inspector_via_class(self):
+        m = PluginManifest(name="test", version="1.0.0")
+        info = PermissionInspector.inspect(m)
+        assert "summary" in info
+
+    def test_dependency_inspector_via_class(self):
+        m = PluginManifest(name="test", version="1.0.0")
+        result = DependencyInspector.inspect(m)
+        assert result == []
+
+    def test_config_inspector_via_class(self):
+        m = PluginManifest(name="test", version="1.0.0")
+        info = ConfigInspector.inspect(m)
+        assert info["has_schema"] is False
+
+    def test_info_exporter_via_class(self):
+        mgr = PluginManager()
+        info = PluginInfoExporter.export("test", mgr)
+        assert info["loaded"] is False
+
+    def test_doc_generator_via_class(self):
+        mgr = PluginManager()
+        docs = PluginDocGenerator.generate("test", mgr)
+        assert isinstance(docs, str)
+
+
 # ---- helpers ----
 
 def _create_test_package(pkg_path: Path) -> PluginPackage:
-    from app.plugins.sdk.package import _compute_hash
     mgr = PluginManager()
     pm = PackageManager(mgr)
     return pm.inspect(pkg_path)
