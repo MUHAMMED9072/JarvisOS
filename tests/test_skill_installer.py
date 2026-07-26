@@ -235,6 +235,9 @@ class TestSkillInstallerInstall:
             def get(self, key):
                 return self.services[key]
 
+            def exists(self, key):
+                return key in self.services
+
         registry = FakeRegistry()
         installer = SkillInstaller()
         manager = SkillManager()

@@ -58,6 +58,9 @@ class FakeRegistry:
         self.get_calls.append(key)
         return self.services[key]
 
+    def exists(self, key: str) -> bool:
+        return key in self.services
+
 
 class TestSkillLifecycle:
 

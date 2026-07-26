@@ -27,6 +27,9 @@ def _backup_timestamp() -> str:
 
 class EvolutionBrain:
 
+    def __init__(self, registry=None):
+        self._registry = registry
+
     TASKS={
         "1":("Improve dynamic skill discovery.","app/skills/loader.py"),
         "2":("Improve semantic search.","app/memory/search.py"),
@@ -37,7 +40,7 @@ class EvolutionBrain:
     def evolve(self) -> bool:
         Analyzer().analyze()
         ProjectScanner().scan()
-        EvolutionPlanner().create_plan()
+        EvolutionPlanner(self._registry).create_plan()
 
         print("="*50)
         print("JARVIS EVOLUTION TASKS")
@@ -62,11 +65,11 @@ class EvolutionBrain:
             print(f"[BLOCKED] Could not create backup: {backup_result.message}")
             return False
 
-        patch=CodeGenerator().generate_task(task,target)
+        patch=CodeGenerator(self._registry).generate_task(task,target)
         PatchReviewer().review(patch,target)
 
         for _ in range(3):
-            AutoFixer().fix()
+            AutoFixer(self._registry).fix()
 
         ok,report=PatchValidator().validate(patch)
 

@@ -36,6 +36,7 @@ class TestFastBrain:
         r.register("skill_manager", skill_manager)
         r.register("memory", MagicMock())
         r.register("ai_router", MagicMock())
+        r.register("ai_manager", MagicMock())
         r.register("fast_brain", FastBrain(r))
         r.register("smart_brain", SmartBrain(r))
         r.register("deep_brain", DeepBrain(r))
@@ -88,6 +89,9 @@ class TestSmartBrain:
         ai_router = MagicMock()
         ai_router.ask.return_value = "Hello! How can I help you?"
         r.register("ai_router", ai_router)
+        ai_manager = MagicMock()
+        ai_manager.ask.return_value = "Hello! How can I help you?"
+        r.register("ai_manager", ai_manager)
         r.register("fast_brain", FastBrain(r))
         r.register("smart_brain", SmartBrain(r))
         r.register("deep_brain", DeepBrain(r))
@@ -112,7 +116,7 @@ class TestSmartBrain:
         result = brain.process(cortex_request)
         assert result.success is True
         assert "Hello" in result.message
-        brain.registry.get("ai_router").ask.assert_called_once()
+        brain.registry.get("ai_manager").ask.assert_called_once()
 
     def test_process_returns_skill_result(self, brain, cortex_request):
         result = brain.process(cortex_request)
@@ -137,6 +141,18 @@ class TestDeepBrain:
         ai_router = MagicMock()
         ai_router.ask.return_value = "I'll help you with that."
         r.register("ai_router", ai_router)
+        plan_result = MagicMock()
+        plan_result.plan = MagicMock(title="P", objective="O", steps=())
+        plan_result.plan.metadata = None
+        plan_result.provider = "mock"
+        plan_result.model = "m"
+        plan_result.duration_ms = 1.0
+        plan_result.metadata = {}
+        ai_manager = MagicMock()
+        ai_manager.plan.return_value = plan_result
+        ai_manager.ask.return_value = "I'll help you with that."
+        ai_manager.create_conversation.return_value = MagicMock(conversation_id="mock")
+        r.register("ai_manager", ai_manager)
         r.register("fast_brain", FastBrain(r))
         r.register("smart_brain", SmartBrain(r))
         r.register("deep_brain", DeepBrain(r))

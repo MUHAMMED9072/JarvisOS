@@ -1,17 +1,24 @@
 from __future__ import annotations
 
 import os
+from typing import TYPE_CHECKING, Any, Generator
 
 from openai import OpenAI
 
 from dotenv import load_dotenv
 
+if TYPE_CHECKING:
+    from ..structured import StructuredResult, StructuredSchema
+    from ..tools import ToolCall, ToolDefinition
+
 from .base import (
     _ProviderBase,
     AIResponse,
+    AIStreamChunk,
     ProviderCapability,
     ProviderNotConfiguredError,
     _call_sdk,
+    _stream_sdk,
     validate_optional_str,
     validate_str,
     validate_timeout,
@@ -22,6 +29,22 @@ from .base import (
 load_dotenv()
 
 
+def _handle_deepseek_response(raw_response: Any, tool_calls: list, structured_result: Any = None) -> tuple[str, dict]:
+    content = raw_response.choices[0].message.content or ""
+    metadata: dict = {}
+    if raw_response.usage:
+        metadata.update({
+            "prompt_tokens": raw_response.usage.prompt_tokens,
+            "completion_tokens": raw_response.usage.completion_tokens,
+            "total_tokens": raw_response.usage.total_tokens,
+        })
+    if tool_calls:
+        metadata["tool_calls"] = tool_calls
+    if structured_result is not None:
+        metadata["structured"] = structured_result
+    return content, metadata
+
+
 class DeepSeekProvider(_ProviderBase):
 
     provider_name: str = "deepseek"
@@ -30,6 +53,10 @@ class DeepSeekProvider(_ProviderBase):
         ProviderCapability.STREAMING,
         ProviderCapability.FUNCTION_CALLING,
         ProviderCapability.JSON_OUTPUT,
+        ProviderCapability.CONVERSATION,
+        ProviderCapability.SYSTEM_PROMPT,
+        ProviderCapability.REASONING,
+        ProviderCapability.TEXT_GENERATION,
     })
 
     DEFAULT_BASE_URL = "https://api.deepseek.com"
@@ -89,8 +116,50 @@ class DeepSeekProvider(_ProviderBase):
             )
         return self._client
 
+    def format_tools(self, tools: list[ToolDefinition]) -> list[dict]:
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": t.name,
+                    "description": t.description,
+                    "parameters": t.parameters,
+                },
+            }
+            for t in tools
+        ]
+
+    def format_structured_schema(self, schema: StructuredSchema) -> dict | None:
+        return {
+            "response_format": {"type": "json_object"},
+        }
+
+    def parse_tool_calls(self, raw_response: Any) -> list[ToolCall]:
+        from ..tools import ToolCall
+        if raw_response is None:
+            return []
+        message = getattr(raw_response.choices[0], "message", None)
+        if message is None:
+            return []
+        raw_calls = getattr(message, "tool_calls", None)
+        if raw_calls is None:
+            return []
+        return [
+            ToolCall(
+                id=tc.id,
+                name=tc.function.name,
+                arguments=tc.function.arguments,
+            )
+            for tc in raw_calls
+        ]
+
     @retry_with_backoff()
-    def generate(self, prompt: str) -> AIResponse:
+    def generate(
+        self,
+        prompt: str,
+        tools: list[ToolDefinition] | None = None,
+        schema: StructuredSchema | None = None,
+    ) -> AIResponse:
         if not isinstance(prompt, str):
             raise TypeError(
                 f"prompt must be str, got {type(prompt).__name__}"
@@ -105,6 +174,12 @@ class DeepSeekProvider(_ProviderBase):
             kwargs["temperature"] = self._temperature
         if self._max_tokens is not None:
             kwargs["max_tokens"] = self._max_tokens
+        if tools:
+            kwargs["tools"] = self.format_tools(tools)
+        if schema:
+            config = self.format_structured_schema(schema)
+            if config:
+                kwargs.update(config)
         return _call_sdk(
             sdk_call=lambda: client.chat.completions.create(
                 model=self._model,
@@ -113,12 +188,60 @@ class DeepSeekProvider(_ProviderBase):
             ),
             provider_name=self.provider_name,
             model=self._model,
-            response_handler=lambda r: (
-                r.choices[0].message.content or "",
-                {
-                    "prompt_tokens": r.usage.prompt_tokens,
-                    "completion_tokens": r.usage.completion_tokens,
-                    "total_tokens": r.usage.total_tokens,
-                } if r.usage else {},
+            response_handler=lambda r: _handle_deepseek_response(
+                r, self.parse_tool_calls(r),
+                self.parse_structured_response(
+                    r.choices[0].message.content or "", schema,
+                ) if schema else None,
             ),
+        )
+
+    def generate_stream(
+        self, prompt: str,
+    ) -> Generator[AIStreamChunk, None, None]:
+        if not isinstance(prompt, str):
+            raise TypeError(
+                f"prompt must be str, got {type(prompt).__name__}"
+            )
+        client = self._get_client()
+        messages = []
+        if self._system_prompt:
+            messages.append({"role": "system", "content": self._system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        kwargs = {}
+        if self._temperature is not None:
+            kwargs["temperature"] = self._temperature
+        if self._max_tokens is not None:
+            kwargs["max_tokens"] = self._max_tokens
+
+        def chunk_handler(raw_chunk: Any) -> AIStreamChunk | None:
+            choice = raw_chunk.choices[0] if raw_chunk.choices else None
+            if choice is None:
+                return None
+            content = choice.delta.content if choice.delta else ""
+            finish = choice.finish_reason
+            usage = (
+                {
+                    "prompt_tokens": raw_chunk.usage.prompt_tokens,
+                    "completion_tokens": raw_chunk.usage.completion_tokens,
+                    "total_tokens": raw_chunk.usage.total_tokens,
+                }
+                if getattr(raw_chunk, "usage", None)
+                else None
+            )
+            return AIStreamChunk(
+                content=content or "",
+                finish_reason=finish,
+                usage=usage,
+            )
+
+        yield from _stream_sdk(
+            sdk_call=lambda: client.chat.completions.create(
+                model=self._model,
+                messages=messages,
+                stream=True,
+                **kwargs,
+            ),
+            provider_name=self.provider_name,
+            chunk_handler=chunk_handler,
         )

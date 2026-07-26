@@ -8,7 +8,7 @@ from app.skills.result import SkillResult
 
 
 class SmartBrain(BaseBrain):
-    """Conversational path: uses LLM via AIHandler with memory context."""
+    """Conversational path: uses AIManager via AIHandler with memory context."""
 
     def __init__(self, registry):
         super().__init__(registry)

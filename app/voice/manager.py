@@ -23,12 +23,14 @@ Cortex-level errors — they are caught and turned into a fail result.
 from __future__ import annotations
 
 import threading
-from typing import Optional
+import time
+from typing import Any, Optional
 
 from app.core.event_bus import EventBus
 from app.core.logger import JarvisLogger
 from app.core.registry import ServiceRegistry
 from app.cortex.dispatcher import Dispatcher
+from app.cortex.models import CortexResponse
 from app.cortex.pipeline import CortexPipeline
 from app.skills.result import SkillResult
 from app.voice.commands import CommandRouter
@@ -200,6 +202,138 @@ class VoiceManager:
 
         self._maybe_speak(result.message)
         return result
+
+    def handle_transcript_with_response(
+        self,
+        text: str,
+        *,
+        confidence: float = 0.0,
+        session_id: str = "",
+        session_metadata: dict[str, Any] | None = None,
+    ) -> tuple[SkillResult, CortexResponse]:
+        """Run a transcript through cortex + dispatcher and return both
+        the ``SkillResult`` and a ``CortexResponse`` with full metadata.
+
+        This is the voice-aware equivalent of :meth:`handle_transcript`
+        that additionally preserves transcription confidence, source,
+        timestamp, and session metadata in the ``CortexResponse``.
+
+        Voice metadata and error handling follow the same rules as
+        :meth:`handle_transcript` — all exceptions are caught and
+        returned as fail results.
+        """
+        if text is None:
+            return (
+                SkillResult.fail(message="No transcript provided"),
+                CortexResponse(
+                    success=False, response="No transcript provided",
+                    metadata={"error": "empty_transcript"},
+                ),
+            )
+
+        text = text.strip()
+        if not text:
+            return (
+                SkillResult.fail(message="Empty transcript"),
+                CortexResponse(
+                    success=False, response="Empty transcript",
+                    metadata={"error": "empty_transcript"},
+                ),
+            )
+
+        self._ensure_dependencies()
+        assert self._cortex is not None
+        assert self._dispatcher is not None
+
+        if self._event_bus is not None:
+            self._event_bus.publish(self.EVENT_TRANSCRIPT, text)
+
+        timestamp = time.time()
+
+        # 1. Short-circuit for session commands
+        if self._commands.is_command(text):
+            result = self._commands.handle(text)
+            if result is not None:
+                self._maybe_speak(result.message)
+                cr = CortexResponse(
+                    success=True,
+                    response=result.message,
+                    metadata={
+                        "source": "voice",
+                        "command": True,
+                        "timestamp": timestamp,
+                        "session_id": session_id,
+                    },
+                )
+                return result, cr
+
+        # 2. Cortex pipeline
+        try:
+            request = self._cortex.process(text, source="voice")
+            request.confidence = confidence
+        except Exception as exc:
+            self._logger.error("Cortex pipeline failed: %s", exc)
+            self._emit_error(exc)
+            return (
+                SkillResult.fail(message=f"Cortex error: {exc}"),
+                CortexResponse(
+                    success=False, response=str(exc),
+                    metadata={
+                        "error": "pipeline_failure",
+                        "transcript_confidence": confidence,
+                        "source": "voice",
+                        "timestamp": timestamp,
+                        "session_id": session_id,
+                    },
+                ),
+            )
+
+        # 3. Dispatch with response
+        try:
+            result, cortex_response = self._dispatcher.dispatch_with_response(request)
+        except Exception as exc:
+            self._logger.error("Dispatcher failed: %s", exc)
+            self._emit_error(exc)
+            return (
+                SkillResult.fail(message=f"Dispatcher error: {exc}"),
+                CortexResponse(
+                    success=False, response=str(exc),
+                    metadata={
+                        "error": "dispatch_failure",
+                        "transcript_confidence": confidence,
+                        "source": "voice",
+                        "timestamp": timestamp,
+                        "session_id": session_id,
+                    },
+                ),
+            )
+
+        # 4. Enrich metadata with voice information
+        meta: dict[str, Any] = {
+            "transcript_confidence": confidence,
+            "source": "voice",
+            "timestamp": timestamp,
+        }
+        if cortex_response.metadata:
+            meta.update(cortex_response.metadata)
+        if session_id:
+            meta["session_id"] = session_id
+        if session_metadata:
+            meta.update(session_metadata)
+
+        result_cr = CortexResponse(
+            success=result.success,
+            response=str(result.message),
+            provider=cortex_response.provider,
+            model=cortex_response.model,
+            routing_strategy=cortex_response.routing_strategy,
+            conversation_id=cortex_response.conversation_id,
+            template_name=cortex_response.template_name,
+            metadata=meta,
+        )
+
+        self._maybe_speak(result.message)
+        return result, result_cr
 
     def speak(self, text: str) -> None:
         """Public entry point for speaking a piece of text."""

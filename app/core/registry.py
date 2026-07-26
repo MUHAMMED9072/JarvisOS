@@ -34,6 +34,12 @@ class ServiceRegistry:
         with self._lock:
             return name in self._services
 
+    def get_optional(self, name: str) -> Any | None:
+        """Return the service registered as *name*, or ``None`` when
+        *name* has not been registered."""
+        with self._lock:
+            return self._services.get(name)
+
     def remove(self, name: str) -> None:
         with self._lock:
             self._services.pop(name, None)

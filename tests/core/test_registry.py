@@ -167,6 +167,42 @@ class TestServiceRegistry:
         finally:
             registry._lock.release()
 
+    # ------------------------------------------------------------------
+    # get_optional
+    # ------------------------------------------------------------------
+
+    def test_get_optional_returns_none_when_missing(self, registry):
+        assert registry.get_optional("nonexistent") is None
+
+    def test_get_optional_returns_service_when_exists(self, registry):
+        registry.register("svc", 42)
+        assert registry.get_optional("svc") == 42
+
+    def test_get_optional_returns_exact_object(self, registry):
+        obj = {"key": "val"}
+        registry.register("cfg", obj)
+        assert registry.get_optional("cfg") is obj
+
+    def test_get_optional_does_not_raise(self, registry):
+        registry.get_optional("missing")  # no exception
+
+    def test_get_optional_is_thread_safe(self, registry):
+        registry.register("safe", 99)
+        results: list[int] = []
+
+        def read():
+            v = registry.get_optional("safe")
+            results.append(v)
+
+        threads = [threading.Thread(target=read) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert all(v == 99 for v in results)
+        assert registry.get_optional("missing") is None
+
     def test_register_duplicate_under_contention(self, registry):
         """Only one thread succeeds when registering the same name."""
         registry.register("contended", "original")

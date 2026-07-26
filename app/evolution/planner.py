@@ -1,21 +1,25 @@
-import json
 from pathlib import Path
-from app.ai.manager import AIManager
+
+from .ai import EvolutionAI
+
 
 class EvolutionPlanner:
+
+    def __init__(self, registry):
+        self._ai = EvolutionAI(registry)
 
     def create_plan(self):
         prompt = Path("data/ai_prompt.txt").read_text(encoding="utf-8")
 
-        print("[AI] Sending prompt to Qwen2.5-Coder...")
+        print("[AI] Creating evolution plan...")
 
-        answer = AIManager().ask("ollama", prompt)
+        answer = self._ai.plan(prompt)
 
         Path("data").mkdir(exist_ok=True)
 
         Path("data/improvement_plan.md").write_text(
-            answer,
-            encoding="utf-8"
+            str(answer),
+            encoding="utf-8",
         )
 
-        return answer
+        return str(answer)

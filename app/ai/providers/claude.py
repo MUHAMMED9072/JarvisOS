@@ -1,17 +1,24 @@
 from __future__ import annotations
 
 import os
+from typing import TYPE_CHECKING, Any, Generator
 
 from anthropic import Anthropic
 
 from dotenv import load_dotenv
 
+if TYPE_CHECKING:
+    from ..structured import StructuredResult, StructuredSchema
+    from ..tools import ToolCall, ToolDefinition
+
 from .base import (
     _ProviderBase,
     AIResponse,
+    AIStreamChunk,
     ProviderCapability,
     ProviderNotConfiguredError,
     _call_sdk,
+    _stream_sdk,
     validate_optional_str,
     validate_str,
     validate_timeout,
@@ -20,6 +27,19 @@ from .base import (
 
 
 load_dotenv()
+
+
+def _handle_claude_response(raw_response: Any, tool_calls: list, structured_result: Any = None) -> tuple[str, dict]:
+    content = raw_response.content[0].text if raw_response.content and hasattr(raw_response.content[0], "text") else ""
+    metadata: dict = {}
+    if raw_response.usage:
+        metadata["input_tokens"] = raw_response.usage.input_tokens
+        metadata["output_tokens"] = raw_response.usage.output_tokens
+    if tool_calls:
+        metadata["tool_calls"] = tool_calls
+    if structured_result is not None:
+        metadata["structured"] = structured_result
+    return content, metadata
 
 
 class AnthropicProvider(_ProviderBase):
@@ -31,6 +51,10 @@ class AnthropicProvider(_ProviderBase):
         ProviderCapability.FUNCTION_CALLING,
         ProviderCapability.IMAGE_INPUT,
         ProviderCapability.JSON_OUTPUT,
+        ProviderCapability.CONVERSATION,
+        ProviderCapability.SYSTEM_PROMPT,
+        ProviderCapability.REASONING,
+        ProviderCapability.TEXT_GENERATION,
     })
 
     DEFAULT_BASE_URL = "https://api.anthropic.com"
@@ -91,8 +115,40 @@ class AnthropicProvider(_ProviderBase):
             )
         return self._client
 
+    def format_tools(self, tools: list[ToolDefinition]) -> list[dict]:
+        return [
+            {
+                "name": t.name,
+                "description": t.description,
+                "input_schema": t.parameters,
+            }
+            for t in tools
+        ]
+
+    def parse_tool_calls(self, raw_response: Any) -> list[ToolCall]:
+        from ..tools import ToolCall
+        content = getattr(raw_response, "content", None)
+        if not content:
+            return []
+        result: list[ToolCall] = []
+        for block in content:
+            if getattr(block, "type", None) == "tool_use":
+                result.append(
+                    ToolCall(
+                        id=block.id,
+                        name=block.name,
+                        arguments=dict(block.input),
+                    )
+                )
+        return result
+
     @retry_with_backoff()
-    def generate(self, prompt: str) -> AIResponse:
+    def generate(
+        self,
+        prompt: str,
+        tools: list[ToolDefinition] | None = None,
+        schema: StructuredSchema | None = None,
+    ) -> AIResponse:
         if not isinstance(prompt, str):
             raise TypeError(
                 f"prompt must be str, got {type(prompt).__name__}"
@@ -101,21 +157,77 @@ class AnthropicProvider(_ProviderBase):
         kwargs = {}
         if self._temperature is not None:
             kwargs["temperature"] = self._temperature
+        if tools:
+            kwargs["tools"] = self.format_tools(tools)
+
+        system_text = self._system_prompt or ""
+        if schema:
+            system_text = (
+                f"{system_text}\n\nYou must respond with valid JSON that "
+                f"matches this schema: {schema.schema}"
+            ).strip()
+
         return _call_sdk(
             sdk_call=lambda: client.messages.create(
                 model=self._model,
                 max_tokens=self._max_tokens,
-                system=self._system_prompt or "",
+                system=system_text,
                 messages=[{"role": "user", "content": prompt}],
                 **kwargs,
             ),
             provider_name=self.provider_name,
             model=self._model,
-            response_handler=lambda r: (
-                r.content[0].text,
-                {
-                    "input_tokens": r.usage.input_tokens,
-                    "output_tokens": r.usage.output_tokens,
-                } if r.usage else {},
+            response_handler=lambda r: _handle_claude_response(
+                r, self.parse_tool_calls(r),
+                self.parse_structured_response(
+                    r.content[0].text if r.content and hasattr(r.content[0], "text") else "",
+                    schema,
+                ) if schema else None,
             ),
+        )
+
+    def generate_stream(
+        self, prompt: str,
+    ) -> Generator[AIStreamChunk, None, None]:
+        if not isinstance(prompt, str):
+            raise TypeError(
+                f"prompt must be str, got {type(prompt).__name__}"
+            )
+        client = self._get_client()
+        kwargs = {}
+        if self._temperature is not None:
+            kwargs["temperature"] = self._temperature
+
+        def chunk_handler(raw_chunk: Any) -> AIStreamChunk | None:
+            if raw_chunk.type == "content_block_delta":
+                text = getattr(raw_chunk.delta, "text", None)
+                if text:
+                    return AIStreamChunk(content=text)
+            elif raw_chunk.type == "message_delta":
+                usage = (
+                    {
+                        "input_tokens": raw_chunk.usage.input_tokens,
+                        "output_tokens": raw_chunk.usage.output_tokens,
+                    }
+                    if getattr(raw_chunk, "usage", None)
+                    else None
+                )
+                stop_reason = getattr(raw_chunk.delta, "stop_reason", None)
+                return AIStreamChunk(
+                    finish_reason=stop_reason,
+                    usage=usage,
+                )
+            return None
+
+        yield from _stream_sdk(
+            sdk_call=lambda: client.messages.create(
+                model=self._model,
+                max_tokens=self._max_tokens,
+                system=self._system_prompt or "",
+                messages=[{"role": "user", "content": prompt}],
+                stream=True,
+                **kwargs,
+            ),
+            provider_name=self.provider_name,
+            chunk_handler=chunk_handler,
         )

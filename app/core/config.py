@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app.ai.config import AIConfig
 from app.voice.config import VoiceConfig
 
 
@@ -26,7 +27,7 @@ class Config:
 
     LOG_DIR = ROOT / "logs"
 
-    PLUGIN_DIR = APP_DIR / "skills"
+    PLUGIN_DIR = APP_DIR / "plugins"
 
     MEMORY_DIR = ROOT / "memory"
 
@@ -41,6 +42,10 @@ class Config:
     REASONING_BRAIN = "reasoning"
 
     CODING_BRAIN = "coding"
+
+    # Single source of truth for AI subsystem configuration.
+    # Every AI component reads its settings from this object.
+    AI = AIConfig()
 
     # ======================================================
     # VOICE

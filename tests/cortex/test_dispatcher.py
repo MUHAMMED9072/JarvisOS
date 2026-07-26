@@ -25,6 +25,17 @@ class TestDispatcher:
         memory = MagicMock()
         r.register("memory", memory)
         r.register("ai_router", MagicMock())
+        ai_manager = MagicMock()
+        ai_manager.ask.return_value = "AI: response"
+        ai_manager.create_conversation.return_value = MagicMock(conversation_id="mock")
+        plan_result = MagicMock()
+        plan_result.plan = MagicMock(title="P", objective="O", steps=(), metadata=None)
+        plan_result.provider = "p"
+        plan_result.model = "m"
+        plan_result.duration_ms = 1.0
+        plan_result.metadata = {}
+        ai_manager.plan.return_value = plan_result
+        r.register("ai_manager", ai_manager)
         r.register("fast_brain", FastBrain(r))
         r.register("smart_brain", SmartBrain(r))
         r.register("deep_brain", DeepBrain(r))

@@ -7,7 +7,7 @@ from app.skills.result import SkillResult
 
 
 class DeepBrain(BaseBrain):
-    """Deep reasoning path: tries SkillManager first, then LLM planning."""
+    """Deep reasoning path: tries SkillManager first, then AI reasoning."""
 
     def __init__(self, registry):
         super().__init__(registry)
@@ -19,12 +19,12 @@ class DeepBrain(BaseBrain):
         if skill is not skill_manager.fallback:
             return skill.execute(request)
 
-        plan = self._ai.plan(request.text)
+        plan_text = self._ai.plan(request.text)
         response = self._ai.chat(
-            f"Based on this plan:\n{plan}\n\n"
+            f"Based on this plan:\n{plan_text}\n\n"
             f"Handle this request: {request.text}"
         )
         return SkillResult.ok(
             message=response,
-            data={"brain": "deep", "plan": plan},
+            data={"brain": "deep", "plan": str(plan_text)},
         )

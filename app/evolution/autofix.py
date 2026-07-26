@@ -1,7 +1,12 @@
 from pathlib import Path
-from app.ai.manager import AIManager
+
+from .ai import EvolutionAI
+
 
 class AutoFixer:
+
+    def __init__(self, registry):
+        self._ai = EvolutionAI(registry)
 
     def fix(self,
             review_file="data/review_report.txt",
@@ -14,7 +19,7 @@ class AutoFixer:
             print("[AutoFix] Patch already passed review.")
             return patch_file
 
-        prompt=f"""
+        prompt = f"""
 You are fixing a generated Python patch.
 
 Review:
@@ -30,6 +35,6 @@ Rules:
 """
 
         print("[AutoFix] Asking AI to repair patch...")
-        fixed = AIManager().ask("ollama", prompt)
-        Path(patch_file).write_text(fixed, encoding="utf-8")
+        fixed = self._ai.autofix(prompt)
+        Path(patch_file).write_text(str(fixed), encoding="utf-8")
         return patch_file

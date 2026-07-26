@@ -29,15 +29,40 @@ class TestAIHandler:
     @pytest.fixture
     def handler(self):
         registry = MagicMock()
-        ai_router = MagicMock()
-        ai_router.ask.return_value = "AI response"
-        registry.get.return_value = ai_router
+        ai_manager = MagicMock()
+        ai_manager.ask.return_value = "AI response"
+        ai_manager.create_conversation.return_value = MagicMock(conversation_id="conv_mock")
+        # plan()/reason() need to return objects with .plan/.chain etc
+        plan_result = MagicMock()
+        plan_result.plan = MagicMock(title="P", objective="O", steps=(), metadata=None)
+        plan_result.provider = "p"
+        plan_result.model = "m"
+        plan_result.duration_ms = 1.0
+        plan_result.metadata = {}
+        ai_manager.plan.return_value = plan_result
+        chain_result = MagicMock()
+        chain_result.chain = MagicMock(objective="O", steps=(), conclusion="C", confidence=1.0, assumptions=(), metadata=None)
+        chain_result.provider = "p"
+        chain_result.model = "m"
+        chain_result.duration_ms = 1.0
+        chain_result.metadata = {}
+        ai_manager.reason.return_value = chain_result
+
+        memory = MagicMock()
+        memory.get_session_messages.return_value = []
+        memory.search.return_value = []
+
+        def _get(key):
+            if key == "memory":
+                return memory
+            return ai_manager
+        registry.get.side_effect = _get
         return AIHandler(registry)
 
     def test_chat_returns_response(self, handler):
         response = handler.chat("hello")
         assert response == "AI response"
-        handler.registry.get.assert_called_with("ai_router")
+        handler.registry.get.assert_any_call("ai_manager")
 
     def test_chat_passes_provider(self, handler):
         response = handler.chat("hello", provider="ollama")
@@ -45,7 +70,7 @@ class TestAIHandler:
 
     def test_plan_returns_plan(self, handler):
         response = handler.plan("build a calculator")
-        assert response == "AI response"
+        assert "Plan:" in str(response)
 
     def test_summarize_returns_summary(self, handler):
         response = handler.summarize("long text here")

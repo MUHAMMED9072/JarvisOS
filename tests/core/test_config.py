@@ -40,7 +40,7 @@ class TestConfig:
         assert Config.LOG_DIR == Config.ROOT / "logs"
 
     def test_plugin_dir(self):
-        assert Config.PLUGIN_DIR == Config.ROOT / "app" / "skills"
+        assert Config.PLUGIN_DIR == Config.ROOT / "app" / "plugins"
 
     def test_memory_dir(self):
         assert Config.MEMORY_DIR == Config.ROOT / "memory"

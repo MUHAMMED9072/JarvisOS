@@ -2,12 +2,18 @@ from __future__ import annotations
 
 import os
 import time
+from typing import TYPE_CHECKING
 
 from dotenv import load_dotenv
+
+if TYPE_CHECKING:
+    from ..structured import StructuredSchema
+    from ..tools import ToolDefinition
 
 from .base import (
     AIProvider,
     AIResponse,
+    ProviderCapability,
     ProviderNotConfiguredError,
     validate_str,
     validate_timeout,
@@ -33,7 +39,12 @@ class OllamaProvider(AIProvider):
 
     provider_name: str = "ollama"
 
-    capabilities: frozenset = frozenset()
+    capabilities: frozenset = frozenset({
+        ProviderCapability.STREAMING,
+        ProviderCapability.CONVERSATION,
+        ProviderCapability.SYSTEM_PROMPT,
+        ProviderCapability.TEXT_GENERATION,
+    })
 
     DEFAULT_BASE_URL = "http://localhost:11434"
     DEFAULT_MODEL = "qwen2.5-coder"
@@ -60,7 +71,14 @@ class OllamaProvider(AIProvider):
         )
         self._timeout = validate_timeout(timeout, owner=self.__class__.__name__)
 
-    def generate(self, prompt: str, *, model: str | None = None) -> AIResponse:
+    def generate(
+        self,
+        prompt: str,
+        *,
+        tools: list[ToolDefinition] | None = None,
+        schema: StructuredSchema | None = None,
+        model: str | None = None,
+    ) -> AIResponse:
         """
         Generate a text response for the supplied prompt.
 

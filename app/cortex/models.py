@@ -26,3 +26,9 @@ class CortexRequest:
 class CortexResponse:
     success: bool
     response: str
+    provider: str = ""
+    model: str = ""
+    routing_strategy: str = ""
+    conversation_id: str = ""
+    template_name: str = ""
+    metadata: dict = field(default_factory=dict)

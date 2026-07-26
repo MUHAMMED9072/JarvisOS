@@ -1,5 +1,4 @@
 from app.skills.base import Skill
-from app.skills.result import SkillResult
 
 
 class ChatSkill(Skill):
@@ -7,10 +6,16 @@ class ChatSkill(Skill):
     name = "Chat Skill"
     intent = "chat"
     version = "1.0.0"
-    description = "Reasoning AI"
+    description = "Conversational AI"
+
+    _conversation_id: str | None = None
 
     def run(self, request):
-
-        return SkillResult.ok(
-            "Reasoning Brain will be connected later."
+        if self._conversation_id is None:
+            conv = self.create_conversation()
+            if conv is not None:
+                self._conversation_id = conv.conversation_id
+        return self.ask(
+            request.text,
+            conversation_id=self._conversation_id,
         )

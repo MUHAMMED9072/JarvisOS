@@ -4,7 +4,12 @@ import time
 from dataclasses import dataclass, field
 from enum import IntFlag, auto
 from functools import wraps
-from typing import Any, Callable, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Callable, Generator, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from ..conversation import ConversationMessage
+    from ..structured import StructuredSchema, StructuredResult
+    from ..tools import ToolCall, ToolDefinition
 
 
 # ---------------------------------------------------------------------------
@@ -92,6 +97,18 @@ class ProviderUnexpectedError(AIProviderError):
     """Raised for any provider-side failure that doesn't fit the categories above."""
 
 
+class AllProvidersFailedError(AIProviderError):
+    """Raised when every provider in a routing chain has failed."""
+
+    def __init__(
+        self,
+        failures: dict[str, Exception] | None = None,
+        message: str = "All providers failed",
+    ) -> None:
+        self.failures = failures or {}
+        super().__init__(message)
+
+
 # ---------------------------------------------------------------------------
 # Capability flags
 # ---------------------------------------------------------------------------
@@ -105,6 +122,10 @@ class ProviderCapability(IntFlag):
     EMBEDDINGS = auto()
     IMAGE_INPUT = auto()
     JSON_OUTPUT = auto()
+    CONVERSATION = auto()
+    SYSTEM_PROMPT = auto()
+    REASONING = auto()
+    TEXT_GENERATION = auto()
 
 
 # ---------------------------------------------------------------------------
@@ -271,6 +292,10 @@ def retry_with_backoff(
                     if not isinstance(exc, retryable) or attempt >= max_retries:
                         raise
                     last_exc = exc
+                    if args:
+                        tracker = getattr(args[0], '_retry_tracker', None)
+                        if tracker is not None:
+                            tracker(attempt + 1, max_retries, type(exc).__name__)
                     delay = base_delay * (2**attempt)
                     time.sleep(delay)
             raise last_exc  # type: ignore[misc]
@@ -331,6 +356,120 @@ def _call_sdk(
 
 
 # ---------------------------------------------------------------------------
+# Streaming types
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class AIStreamChunk:
+    """A single chunk yielded during streaming generation."""
+    content: str = ""
+    finish_reason: str | None = None
+    usage: dict | None = None
+
+
+class AIStreamResponse:
+    """Iterable streaming response that accumulates chunks and can
+    produce a final assembled ``AIResponse``.
+
+    Usage::
+
+        stream = provider.generate_stream("Hello")
+        for chunk in stream:
+            print(chunk.content, end="")
+        result = stream.final_response()
+    """
+
+    def __init__(
+        self,
+        provider: str,
+        model: str,
+        generator: Generator[AIStreamChunk, None, None],
+    ) -> None:
+        self._provider = provider
+        self._model = model
+        self._generator = generator
+        self._full_text: list[str] = []
+        self._finish_reason: str | None = None
+        self._usage: dict = {}
+        self._start_time = time.monotonic()
+        self._cancelled = False
+
+    def __iter__(self) -> AIStreamResponse:
+        return self
+
+    def __next__(self) -> AIStreamChunk:
+        if self._cancelled:
+            raise StopIteration
+        try:
+            chunk = next(self._generator)
+            self._full_text.append(chunk.content)
+            if chunk.finish_reason:
+                self._finish_reason = chunk.finish_reason
+            if chunk.usage:
+                self._usage = chunk.usage
+            return chunk
+        except StopIteration:
+            raise
+
+    def cancel(self) -> None:
+        """Gracefully cancel the stream and release resources."""
+        self._cancelled = True
+        self._generator.close()
+
+    def final_response(self) -> AIResponse:
+        """Assemble the final ``AIResponse`` after the stream completes."""
+        metadata: dict = {}
+        if self._finish_reason:
+            metadata["finish_reason"] = self._finish_reason
+        if self._usage:
+            metadata.update(self._usage)
+        return AIResponse(
+            "".join(self._full_text),
+            provider=self._provider,
+            model=self._model,
+            latency_ms=(time.monotonic() - self._start_time) * 1000,
+            metadata=metadata,
+        )
+
+
+def _stream_sdk(
+    sdk_call: Callable[[], Any],
+    provider_name: str,
+    chunk_handler: Callable[[Any], AIStreamChunk | None],
+) -> Generator[AIStreamChunk, None, None]:
+    """Execute a streaming SDK call and yield ``AIStreamChunk`` items.
+
+    Parameters
+    ----------
+    sdk_call
+        A zero-argument callable that initiates the streaming API call
+        and returns an iterable of raw SDK response chunks.
+    provider_name
+        Used in exception messages.
+    chunk_handler
+        Receives each raw SDK chunk and returns an ``AIStreamChunk``
+        (or ``None`` to skip the chunk).
+
+    Yields
+    ------
+    AIStreamChunk
+        One per content delta from the SDK stream.
+    """
+    try:
+        stream = sdk_call()
+    except Exception as exc:
+        raise map_exception(exc, provider_name)
+    try:
+        for raw_chunk in stream:
+            chunk = chunk_handler(raw_chunk)
+            if chunk is not None:
+                yield chunk
+    except Exception as exc:
+        raise map_exception(exc, provider_name)
+
+
+# ---------------------------------------------------------------------------
 # Shared provider base class
 # ---------------------------------------------------------------------------
 
@@ -363,6 +502,85 @@ class _ProviderBase:
             capabilities=self.capabilities,
             timeout=self._timeout,
         )
+
+    def check_availability(self) -> bool:
+        """Return True if this provider appears configured and usable.
+
+        Subclasses that require API keys or other credentials may
+        override this to perform the appropriate check.  The default
+        implementation returns ``True``.
+        """
+        try:
+            if hasattr(self, "_resolve_api_key"):
+                self._resolve_api_key()  # type: ignore[attr-defined]
+                return True
+            return True
+        except AIProviderError:
+            return False
+
+    def format_messages(
+        self,
+        messages: list[ConversationMessage],
+    ) -> list[dict]:
+        """Translate conversation messages into SDK-native format.
+
+        Override in subclasses to return the exact structure expected
+        by the respective SDK.  The default implementation returns
+        ``{"role": ..., "content": ...}`` dicts suitable for
+        OpenAI-compatible chat completion APIs.
+        """
+        result: list[dict] = []
+        for m in messages:
+            entry: dict = {"role": m.role, "content": m.content}
+            if m.metadata:
+                entry["metadata"] = m.metadata
+            result.append(entry)
+        return result
+
+    def format_tools(
+        self, tools: list[ToolDefinition],
+    ) -> list[dict]:
+        """Translate internal ``ToolDefinition`` objects into the
+        SDK-native tool format expected by this provider.
+
+        Subclasses that support tool calling **must** override this
+        method.  The default implementation raises
+        ``NotImplementedError``.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement format_tools"
+        )
+
+    def parse_tool_calls(self, raw_response: Any) -> list[ToolCall]:
+        """Extract ``ToolCall`` objects from an SDK response.
+
+        Subclasses that support tool calling **must** override this
+        method.  The default implementation returns an empty list.
+        """
+        return []
+
+    def format_structured_schema(
+        self, schema: StructuredSchema,
+    ) -> dict | None:
+        """Translate *schema* into SDK-specific structured output config.
+
+        Subclasses that support structured output **may** override this
+        method.  The default implementation returns ``None`` (no
+        special SDK configuration).
+        """
+        return None
+
+    def parse_structured_response(
+        self, raw_text: str, schema: StructuredSchema,
+    ) -> StructuredResult:
+        """Parse and validate *raw_text* against *schema*.
+
+        Override in subclasses that need custom parsing logic
+        (e.g. extracting JSON from a code fence).  The default
+        implementation delegates to :func:`parse_structured_output`.
+        """
+        from ..structured import parse_structured_output
+        return parse_structured_output(raw_text, schema)
 
 
 # ---------------------------------------------------------------------------
@@ -399,6 +617,25 @@ class AIProvider(Protocol):
       ``getattr(provider, "provider_info", None)``.
     """
 
-    def generate(self, prompt: str) -> str:
-        """Generate a text response for the supplied prompt."""
+    def generate(
+        self,
+        prompt: str,
+        tools: list[ToolDefinition] | None = None,
+        schema: StructuredSchema | None = None,
+    ) -> str:
+        """Generate a text (or tool-assisted) response for the supplied
+        prompt.
+
+        If *tools* is provided and the provider supports tool calling,
+        the provider may request tool invocations.  Tool calls are
+        returned in the ``AIResponse.metadata["tool_calls"]`` list.
+
+        If *schema* is provided and the provider supports structured
+        output, the response is parsed and validated against the
+        schema.  The ``StructuredResult`` is placed in
+        ``AIResponse.metadata["structured"]``.
+
+        Providers that do not support these features silently ignore
+        the corresponding parameters.
+        """
         ...
