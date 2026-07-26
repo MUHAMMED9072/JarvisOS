@@ -50,6 +50,9 @@ class PluginManager:
     def get_plugin_services(self, plugin_name: str) -> list[str]:
         return list(self._plugin_services.get(plugin_name, []))
 
+    def get_all_services(self) -> dict[str, list[str]]:
+        return {k: list(v) for k, v in self._plugin_services.items()}
+
     def _cleanup_plugin_services(self, plugin_name: str) -> None:
         service_names = self._plugin_services.pop(plugin_name, [])
         if self._registry is not None:

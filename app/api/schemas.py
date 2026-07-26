@@ -271,3 +271,70 @@ class SkillDiscoverResponse(BaseModel):
     status: str = Field(..., description="Discovery status")
     count: int = Field(0, description="Number of skills discovered")
     skills: list[str] = Field(default_factory=list, description="Discovered skill intents")
+
+
+# ==========================================================================
+# Plugins (P11-04)
+# ==========================================================================
+
+
+class PluginInfo(BaseModel):
+    name: str = Field(..., description="Plugin name")
+    version: str = Field("", description="Plugin version")
+    enabled: bool = Field(False, description="Whether the plugin is enabled")
+    description: str = Field("", description="Plugin description")
+    author: str = Field("", description="Plugin author")
+    min_core_version: str = Field("", description="Minimum core version required")
+    capabilities: list[str] = Field(default_factory=list, description="Plugin capabilities")
+    permissions: list[str] = Field(default_factory=list, description="Plugin permissions")
+    services: list[str] = Field(default_factory=list, description="Services registered by this plugin")
+    errors: list[str] = Field(default_factory=list, description="Plugin errors")
+
+
+class PluginListResponse(BaseModel):
+    plugins: list[PluginInfo]
+
+
+class PluginNameRequest(BaseModel):
+    name: str = Field(..., min_length=1, description="Plugin name")
+
+
+class PluginActionResponse(BaseModel):
+    status: str = Field(..., description="Action status")
+    message: str = Field(..., description="Status message")
+    name: str = Field(..., description="Plugin name")
+
+
+class PluginDiscoverResponse(BaseModel):
+    status: str = Field(..., description="Discovery status")
+    count: int = Field(0, description="Number of plugins loaded")
+    plugins: list[str] = Field(default_factory=list, description="Loaded plugin names")
+
+
+class PluginServiceInfo(BaseModel):
+    plugin: str = Field(..., description="Plugin name")
+    services: list[str] = Field(..., description="Service names")
+
+
+class PluginServiceListResponse(BaseModel):
+    services: list[PluginServiceInfo]
+
+
+class PluginPermissionInfo(BaseModel):
+    name: str = Field(..., description="Permission name")
+    description: str = Field("", description="Permission description")
+
+
+class PluginPermissionListResponse(BaseModel):
+    permissions: list[PluginPermissionInfo]
+
+
+class PluginPackageInfo(BaseModel):
+    name: str = Field(..., description="Package name")
+    version: str = Field(..., description="Package version")
+    installed_at: str = Field("", description="Installation timestamp")
+    package_hash: str = Field("", description="Package SHA-256 hash")
+
+
+class PluginPackageListResponse(BaseModel):
+    packages: list[PluginPackageInfo]
