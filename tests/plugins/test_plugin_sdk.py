@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import tempfile
+import zipfile
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -17,6 +19,13 @@ from app.skills.base import Skill
 from app.skills.manager import SkillManager
 from app.skills.result import SkillResult
 from app.plugins.sdk import (
+    InstallMetadata,
+    PackageCompatibilityError,
+    PackageError,
+    PackageExistsError,
+    PackageManager,
+    PackageNotFoundError,
+    PackageValidationError,
     Permission,
     PermissionDenied,
     PermissionManager,
@@ -26,6 +35,7 @@ from app.plugins.sdk import (
     PluginDependency,
     PluginManager,
     PluginManifest,
+    PluginPackage,
     check_version_compatibility,
     validate_manifest,
 )
@@ -2663,3 +2673,374 @@ class TestPluginSecurityBackwardCompat:
     def test_subscribe_works_without_permission_manager(self):
         ctx = PluginContext(None, "test")
         ctx.subscribe("e", lambda: None)
+
+
+# ==========================================================================
+# P10-09 – Plugin Packaging & Installation
+# ==========================================================================
+
+
+@pytest.fixture
+def temp_plugin_source():
+    """Create a temporary plugin source directory."""
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(tmp) / "my-plugin"
+        src.mkdir()
+        (src / "__init__.py").write_text(
+            'from app.plugins.sdk import Plugin\n'
+            'class MyPlugin(Plugin):\n'
+            '    name = "my-plugin"\n'
+            '    version = "1.0.0"\n',
+            encoding="utf-8",
+        )
+        (src / "plugin.json").write_text(
+            json.dumps({
+                "name": "my-plugin",
+                "version": "1.0.0",
+                "description": "Test plugin",
+                "min_core_version": "0.4.0",
+            }),
+            encoding="utf-8",
+        )
+        yield src
+
+
+@pytest.fixture
+def jarvis_plugin(temp_plugin_source):
+    """Create a .jarvis-plugin ZIP from the source."""
+    output = temp_plugin_source.parent / "my-plugin.jarvis-plugin"
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as zf:
+        for f in temp_plugin_source.rglob("*"):
+            if f.is_file():
+                zf.write(f, f.relative_to(temp_plugin_source))
+    yield output
+
+
+@pytest.fixture
+def pkg_manager(temp_plugin_source):
+    """PackageManager with mocked Config.PLUGIN_DIR."""
+    from app.core.config import Config
+    original_plugin_dir = Config.PLUGIN_DIR
+    original_data_dir = Config.DATA_DIR
+    Config.PLUGIN_DIR = temp_plugin_source.parent / "installed"
+    Config.DATA_DIR = temp_plugin_source.parent / "data"
+    mgr = PluginManager()
+    pm = PackageManager(mgr)
+    yield pm, mgr
+    Config.PLUGIN_DIR = original_plugin_dir
+    Config.DATA_DIR = original_data_dir
+
+
+class TestPluginPackage:
+    """PluginPackage creation and inspection."""
+
+    def test_inspect_valid_package(self, jarvis_plugin):
+        from app.plugins.sdk.package import _compute_hash
+        pkg_path = Path(jarvis_plugin)
+        pkg = _create_test_package(pkg_path)
+        assert pkg.name == "my-plugin"
+        assert pkg.version == "1.0.0"
+        assert pkg.errors == []
+
+    def test_inspect_invalid_zip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_pkg = Path(tmp) / "fake.jarvis-plugin"
+            fake_pkg.write_text("not a zip", encoding="utf-8")
+            with pytest.raises(PackageValidationError):
+                from app.plugins.sdk.package import _compute_hash
+                _create_test_package(fake_pkg)
+
+    def test_inspect_missing_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg_path = Path(tmp) / "no-manifest.jarvis-plugin"
+            import zipfile
+            with zipfile.ZipFile(pkg_path, "w") as zf:
+                zf.writestr("some.py", "code")
+            with pytest.raises(PackageValidationError):
+                from app.plugins.sdk.package import _compute_hash
+                _create_test_package(pkg_path)
+
+    def test_inspect_nonexistent(self):
+        with pytest.raises(PackageNotFoundError):
+            mgr = PluginManager()
+            pm = PackageManager(mgr)
+            pm.inspect("/nonexistent/path.jarvis-plugin")
+
+
+class TestPackageInstall:
+    """Package installation."""
+
+    def test_install_success(self, jarvis_plugin, pkg_manager):
+        pm, mgr = pkg_manager
+        result = pm.install(jarvis_plugin, enable=False)
+        assert result == "my-plugin"
+
+    def test_install_creates_directory(self, jarvis_plugin, pkg_manager):
+        pm, mgr = pkg_manager
+        pm.install(jarvis_plugin, enable=False)
+        from app.core.config import Config
+        assert (Config.PLUGIN_DIR / "my-plugin").is_dir()
+        assert (Config.PLUGIN_DIR / "my-plugin" / "plugin.json").is_file()
+
+    def test_install_records_metadata(self, jarvis_plugin, pkg_manager):
+        pm, mgr = pkg_manager
+        pm.install(jarvis_plugin, enable=False)
+        meta = pm.get_installed("my-plugin")
+        assert meta is not None
+        assert meta.name == "my-plugin"
+        assert meta.version == "1.0.0"
+
+    def test_install_duplicate_fails(self, jarvis_plugin, pkg_manager):
+        pm, mgr = pkg_manager
+        pm.install(jarvis_plugin, enable=False)
+        with pytest.raises(PackageExistsError):
+            pm.install(jarvis_plugin, enable=False)
+
+    def test_install_invalid_package_fails(self, pkg_manager):
+        pm, mgr = pkg_manager
+        with tempfile.TemporaryDirectory() as tmp:
+            bad_pkg = Path(tmp) / "bad.jarvis-plugin"
+            bad_pkg.write_text("not a zip", encoding="utf-8")
+            with pytest.raises(PackageValidationError):
+                pm.install(bad_pkg)
+
+    def test_list_installed(self, jarvis_plugin, pkg_manager):
+        pm, mgr = pkg_manager
+        assert pm.list_installed() == []
+        pm.install(jarvis_plugin, enable=False)
+        installed = pm.list_installed()
+        assert len(installed) == 1
+        assert installed[0].name == "my-plugin"
+
+    def test_get_installed_nonexistent(self, pkg_manager):
+        pm, mgr = pkg_manager
+        assert pm.get_installed("nonexistent") is None
+
+    def test_install_with_loader(self, jarvis_plugin, temp_plugin_source):
+        from app.core.config import Config
+        original_plugin_dir = Config.PLUGIN_DIR
+        original_data_dir = Config.DATA_DIR
+        try:
+            Config.PLUGIN_DIR = temp_plugin_source.parent / "installed2"
+            Config.DATA_DIR = temp_plugin_source.parent / "data2"
+            mgr = PluginManager()
+            from app.plugins.sdk.loader import PluginLoader
+            loader = PluginLoader(mgr)
+            loader.add_directory(Config.PLUGIN_DIR)
+            pm = PackageManager(mgr, loader)
+            result = pm.install(jarvis_plugin, enable=False)
+            assert result == "my-plugin"
+        finally:
+            Config.PLUGIN_DIR = original_plugin_dir
+            Config.DATA_DIR = original_data_dir
+
+
+class TestPackageUninstall:
+    """Package uninstallation."""
+
+    def test_uninstall_removes_directory(self, jarvis_plugin, pkg_manager):
+        pm, mgr = pkg_manager
+        pm.install(jarvis_plugin, enable=False)
+        pm.uninstall("my-plugin")
+        from app.core.config import Config
+        assert not (Config.PLUGIN_DIR / "my-plugin").is_dir()
+
+    def test_uninstall_removes_metadata(self, jarvis_plugin, pkg_manager):
+        pm, mgr = pkg_manager
+        pm.install(jarvis_plugin, enable=False)
+        pm.uninstall("my-plugin")
+        assert pm.get_installed("my-plugin") is None
+
+    def test_uninstall_nonexistent_fails(self, pkg_manager):
+        pm, mgr = pkg_manager
+        with pytest.raises(PackageNotFoundError):
+            pm.uninstall("nonexistent")
+
+
+class TestPackageUpgrade:
+    """Package upgrade."""
+
+    def test_upgrade_updates_version(self, jarvis_plugin, temp_plugin_source, pkg_manager):
+        pm, mgr = pkg_manager
+        pm.install(jarvis_plugin, enable=False)
+        (temp_plugin_source / "plugin.json").write_text(
+            json.dumps({
+                "name": "my-plugin",
+                "version": "2.0.0",
+                "description": "Upgraded",
+                "min_core_version": "0.4.0",
+            }),
+            encoding="utf-8",
+        )
+        upgraded_pkg = temp_plugin_source.parent / "my-plugin-v2.jarvis-plugin"
+        import zipfile
+        with zipfile.ZipFile(upgraded_pkg, "w", zipfile.ZIP_DEFLATED) as zf:
+            for f in temp_plugin_source.rglob("*"):
+                if f.is_file():
+                    zf.write(f, f.relative_to(temp_plugin_source))
+        pm.upgrade("my-plugin", upgraded_pkg, enable=False)
+        meta = pm.get_installed("my-plugin")
+        assert meta is not None
+        assert meta.version == "2.0.0"
+
+    def test_upgrade_nonexistent_fails(self, jarvis_plugin, pkg_manager):
+        pm, mgr = pkg_manager
+        with pytest.raises(PackageNotFoundError):
+            pm.upgrade("nonexistent", jarvis_plugin)
+
+
+class TestPackageExport:
+    """Package export."""
+
+    def test_export_creates_zip(self, jarvis_plugin, pkg_manager):
+        pm, mgr = pkg_manager
+        pm.install(jarvis_plugin, enable=False)
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp) / "exports"
+            out_dir.mkdir()
+            output = pm.export("my-plugin", out_dir)
+            assert output.is_file()
+            assert output.suffix == ".jarvis-plugin"
+
+    def test_export_nonexistent_fails(self, pkg_manager):
+        pm, mgr = pkg_manager
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp) / "exports"
+            out_dir.mkdir()
+            with pytest.raises(PackageNotFoundError):
+                pm.export("nonexistent", out_dir)
+
+
+class TestPackageIntegrity:
+    """Package integrity and verification."""
+
+    def test_verify_installed_package(self, jarvis_plugin, pkg_manager):
+        pm, mgr = pkg_manager
+        pm.install(jarvis_plugin, enable=False)
+        assert pm.verify("my-plugin")
+
+    def test_verify_nonexistent_fails(self, pkg_manager):
+        pm, mgr = pkg_manager
+        assert not pm.verify("nonexistent")
+
+    def test_verify_missing_directory_fails(self, jarvis_plugin, pkg_manager):
+        pm, mgr = pkg_manager
+        pm.install(jarvis_plugin, enable=False)
+        from app.core.config import Config
+        import shutil
+        shutil.rmtree(Config.PLUGIN_DIR / "my-plugin")
+        assert not pm.verify("my-plugin")
+
+
+class TestPackageCompatibility:
+    """Version compatibility during install."""
+
+    def test_incompatible_version_fails(self, temp_plugin_source, pkg_manager):
+        pm, mgr = pkg_manager
+        (temp_plugin_source / "plugin.json").write_text(
+            json.dumps({
+                "name": "my-plugin",
+                "version": "1.0.0",
+                "min_core_version": "99.0.0",
+            }),
+            encoding="utf-8",
+        )
+        pkg_path = temp_plugin_source.parent / "incompat.jarvis-plugin"
+        import zipfile
+        with zipfile.ZipFile(pkg_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for f in temp_plugin_source.rglob("*"):
+                if f.is_file():
+                    zf.write(f, f.relative_to(temp_plugin_source))
+        with pytest.raises(PackageCompatibilityError):
+            pm.install(pkg_path)
+
+
+class TestPackageRollback:
+    """Rollback on install failure."""
+
+    def test_install_failure_cleans_up(self, jarvis_plugin, pkg_manager):
+        pm, mgr = pkg_manager
+        from app.core.config import Config
+        with pytest.raises(PackageError):
+            pm.install(Path("nonexistent-path"), enable=False)
+
+
+class TestPackageMetadata:
+    """Installation metadata."""
+
+    def test_install_metadata_fields(self, jarvis_plugin, pkg_manager):
+        pm, mgr = pkg_manager
+        pm.install(jarvis_plugin, enable=False)
+        meta = pm.get_installed("my-plugin")
+        assert meta is not None
+        assert isinstance(meta.name, str)
+        assert isinstance(meta.version, str)
+        assert isinstance(meta.installed_at, str)
+        assert isinstance(meta.package_hash, str)
+        assert isinstance(meta.manifest, dict)
+
+    def test_install_metadata_persistence(self, jarvis_plugin, pkg_manager):
+        pm, mgr = pkg_manager
+        pm.install(jarvis_plugin, enable=False)
+        from app.plugins.sdk.package import _load_installed_meta
+        raw = _load_installed_meta()
+        assert "my-plugin" in raw
+        assert raw["my-plugin"]["version"] == "1.0.0"
+
+    def test_install_metadata_removed_on_uninstall(self, jarvis_plugin, pkg_manager):
+        pm, mgr = pkg_manager
+        pm.install(jarvis_plugin, enable=False)
+        pm.uninstall("my-plugin")
+        from app.plugins.sdk.package import _load_installed_meta
+        raw = _load_installed_meta()
+        assert "my-plugin" not in raw
+
+
+class TestPackageErrorTypes:
+    """Package error hierarchy."""
+
+    def test_package_error_base(self):
+        assert issubclass(PackageValidationError, PackageError)
+        assert issubclass(PackageExistsError, PackageError)
+        assert issubclass(PackageNotFoundError, PackageError)
+        assert issubclass(PackageCompatibilityError, PackageError)
+        assert issubclass(PackageError, Exception)
+
+    def test_package_error_message(self):
+        err = PackageError("test error")
+        assert str(err) == "test error"
+
+
+class TestPackageBackwardCompat:
+    """Backward compatibility tests."""
+
+    def test_importable_from_app_plugins(self):
+        from app.plugins import PackageManager as PM
+        assert PM is not None
+
+    def test_importable_from_sdk(self):
+        from app.plugins.sdk import PackageManager as PM
+        assert PM is not None
+
+    def test_install_without_loader(self, jarvis_plugin, pkg_manager):
+        pm, mgr = pkg_manager
+        result = pm.install(jarvis_plugin, enable=False)
+        assert result == "my-plugin"
+
+    def test_inspect_returns_plugin_package(self, jarvis_plugin):
+        mgr = PluginManager()
+        pm = PackageManager(mgr)
+        pkg = pm.inspect(jarvis_plugin)
+        assert isinstance(pkg, PluginPackage)
+        assert pkg.name == "my-plugin"
+        assert isinstance(pkg.file_hash, str)
+        assert len(pkg.file_hash) == 64
+
+
+# ---- helpers ----
+
+def _create_test_package(pkg_path: Path) -> PluginPackage:
+    from app.plugins.sdk.package import _compute_hash
+    mgr = PluginManager()
+    pm = PackageManager(mgr)
+    return pm.inspect(pkg_path)

@@ -8,6 +8,16 @@ from app.plugins.sdk.models import (
     check_version_compatibility,
     validate_manifest,
 )
+from app.plugins.sdk.package import (
+    InstallMetadata,
+    PackageError,
+    PackageExistsError,
+    PackageNotFoundError,
+    PackageValidationError,
+    PackageCompatibilityError,
+    PackageManager,
+    PluginPackage,
+)
 from app.plugins.sdk.security import (
     Permission,
     PermissionDenied,
@@ -16,6 +26,13 @@ from app.plugins.sdk.security import (
 
 __all__ = [
     "DiscoveredPlugin",
+    "InstallMetadata",
+    "PackageError",
+    "PackageExistsError",
+    "PackageNotFoundError",
+    "PackageValidationError",
+    "PackageCompatibilityError",
+    "PackageManager",
     "Permission",
     "PermissionDenied",
     "PermissionManager",
@@ -26,6 +43,7 @@ __all__ = [
     "PluginLoader",
     "PluginManager",
     "PluginManifest",
+    "PluginPackage",
     "check_version_compatibility",
     "validate_manifest",
 ]

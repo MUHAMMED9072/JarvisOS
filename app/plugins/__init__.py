@@ -1,5 +1,12 @@
 from app.plugins.sdk import (
     DiscoveredPlugin,
+    InstallMetadata,
+    PackageCompatibilityError,
+    PackageError,
+    PackageExistsError,
+    PackageManager,
+    PackageNotFoundError,
+    PackageValidationError,
     Permission,
     PermissionDenied,
     PermissionManager,
@@ -10,12 +17,20 @@ from app.plugins.sdk import (
     PluginLoader,
     PluginManager,
     PluginManifest,
+    PluginPackage,
     check_version_compatibility,
     validate_manifest,
 )
 
 __all__ = [
     "DiscoveredPlugin",
+    "InstallMetadata",
+    "PackageCompatibilityError",
+    "PackageError",
+    "PackageExistsError",
+    "PackageManager",
+    "PackageNotFoundError",
+    "PackageValidationError",
     "Permission",
     "PermissionDenied",
     "PermissionManager",
@@ -26,6 +41,7 @@ __all__ = [
     "PluginLoader",
     "PluginManager",
     "PluginManifest",
+    "PluginPackage",
     "check_version_compatibility",
     "validate_manifest",
 ]
