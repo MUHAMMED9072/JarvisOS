@@ -1,5 +1,8 @@
 from app.plugins.sdk import (
     DiscoveredPlugin,
+    Permission,
+    PermissionDenied,
+    PermissionManager,
     Plugin,
     PluginConfig,
     PluginContext,
@@ -13,6 +16,9 @@ from app.plugins.sdk import (
 
 __all__ = [
     "DiscoveredPlugin",
+    "Permission",
+    "PermissionDenied",
+    "PermissionManager",
     "Plugin",
     "PluginConfig",
     "PluginContext",

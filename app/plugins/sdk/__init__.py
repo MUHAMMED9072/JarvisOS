@@ -8,9 +8,17 @@ from app.plugins.sdk.models import (
     check_version_compatibility,
     validate_manifest,
 )
+from app.plugins.sdk.security import (
+    Permission,
+    PermissionDenied,
+    PermissionManager,
+)
 
 __all__ = [
     "DiscoveredPlugin",
+    "Permission",
+    "PermissionDenied",
+    "PermissionManager",
     "Plugin",
     "PluginConfig",
     "PluginContext",

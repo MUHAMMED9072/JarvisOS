@@ -15,6 +15,7 @@ from app.plugins.sdk.models import (
     check_version_compatibility,
     validate_manifest,
 )
+from app.plugins.sdk.security import PermissionManager
 
 
 class PluginManager:
@@ -106,6 +107,14 @@ class PluginManager:
     def _plugin_config_dir(self, name: str) -> Path:
         return Config.DATA_DIR / "plugins" / name
 
+    def _plugin_permissions(self, name: str) -> list[str]:
+        manifest = self._manifests.get(name)
+        if manifest is None:
+            return []
+        if manifest.permissions:
+            return list(manifest.permissions)
+        return list(manifest.capabilities)
+
     def load(self, name: str) -> None:
         plugin = self._plugins.get(name)
         if plugin is None:
@@ -121,6 +130,9 @@ class PluginManager:
             manifest = self._manifests.get(name)
             if manifest and manifest.config_schema:
                 ctx.config.set_schema(manifest.config_schema)
+            perms = self._plugin_permissions(name)
+            perm_mgr = PermissionManager(name, permissions=perms)
+            ctx.set_permissions(perm_mgr)
             ctx.load_config()
             plugin.on_load()
             JarvisLogger.info("Plugin loaded: %s", name)

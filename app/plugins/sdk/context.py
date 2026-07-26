@@ -7,6 +7,11 @@ from typing import Any
 from app.core.config import Config
 from app.core.logger import JarvisLogger
 from app.plugins.sdk.config import PluginConfig
+from app.plugins.sdk.security import (
+    Permission,
+    PermissionDenied,
+    PermissionManager,
+)
 
 
 class PluginContext:
@@ -26,8 +31,10 @@ class PluginContext:
             schema=None,
             auto_save=True,
         )
+        self._config._set_permission_checker(self._check_permission)
         self._logger = JarvisLogger
         self._manager: Any = None
+        self._permissions: PermissionManager | None = None
         self._registered_services: list[str] = []
         self._subscriptions: list[tuple[str, Callable[..., Any]]] = []
         self._skill_intents: list[str] = []
@@ -36,6 +43,8 @@ class PluginContext:
         self._manager = manager
 
     def register_service(self, name: str, service: Any) -> None:
+        if not self._check_permission(Permission.SERVICES, "register_service"):
+            return
         full_name = f"plugin.{self._plugin_name}.{name}"
         if self._registry is not None:
             try:
@@ -45,6 +54,8 @@ class PluginContext:
         self._track_services([full_name])
 
     def export_service(self, name: str, service: Any) -> None:
+        if not self._check_permission(Permission.SERVICES, "export_service"):
+            return
         if self._registry is not None:
             try:
                 self._registry.register(name, service)
@@ -66,17 +77,23 @@ class PluginContext:
                     mgr_method(self._plugin_name, n)
 
     def subscribe(self, event: str, callback: Callable[..., Any]) -> None:
+        if not self._check_permission(Permission.EVENTS, "subscribe"):
+            return
         bus = self._event_bus_ref()
         if bus is not None:
             bus.subscribe(event, callback)
         self._subscriptions.append((event, callback))
 
     def publish(self, event: str, *args: Any, **kwargs: Any) -> None:
+        if not self._check_permission(Permission.EVENTS, "publish"):
+            return
         bus = self._event_bus_ref()
         if bus is not None:
             bus.publish(event, *args, **kwargs)
 
     def unsubscribe(self, event: str, callback: Callable[..., Any]) -> None:
+        if not self._check_permission(Permission.EVENTS, "unsubscribe"):
+            return
         bus = self._event_bus_ref()
         if bus is not None:
             bus.unsubscribe(event, callback)
@@ -110,6 +127,18 @@ class PluginContext:
     @property
     def config(self) -> PluginConfig:
         return self._config
+
+    @property
+    def permissions(self) -> PermissionManager | None:
+        return self._permissions
+
+    def set_permissions(self, manager: PermissionManager) -> None:
+        self._permissions = manager
+
+    def _check_permission(self, permission: str, action: str = "") -> bool:
+        if self._permissions is None:
+            return True
+        return self._permissions.check(permission, action)
 
     @property
     def core_config(self) -> _CoreConfigProxy:
@@ -205,6 +234,8 @@ class PluginContext:
         schema: Any = None,
         required_capabilities: Any = None,
     ) -> Any:
+        if not self._check_permission(Permission.AI, "ai_ask"):
+            return None
         ai = self.ai_manager
         if ai is None:
             return None
@@ -231,6 +262,8 @@ class PluginContext:
         prompt_template: str | None = None,
         template_variables: dict[str, str] | None = None,
     ) -> Any:
+        if not self._check_permission(Permission.AI, "ai_ask_stream"):
+            return None
         ai = self.ai_manager
         if ai is None:
             return None
@@ -258,6 +291,8 @@ class PluginContext:
         max_messages: int | None = None,
         metadata: dict | None = None,
     ) -> Any:
+        if not self._check_permission(Permission.AI, "create_conversation"):
+            return None
         ai = self.ai_manager
         if ai is None:
             return None
@@ -270,12 +305,16 @@ class PluginContext:
         )
 
     def get_conversation(self, conversation_id: str) -> Any:
+        if not self._check_permission(Permission.AI, "get_conversation"):
+            return None
         ai = self.ai_manager
         if ai is None:
             return None
         return ai.conversation_manager.get(conversation_id)
 
     def delete_conversation(self, conversation_id: str) -> bool:
+        if not self._check_permission(Permission.AI, "delete_conversation"):
+            return False
         ai = self.ai_manager
         if ai is None:
             return False
@@ -296,6 +335,8 @@ class PluginContext:
         planning_prompt: str | None = None,
         required_capabilities: Any = None,
     ) -> Any:
+        if not self._check_permission(Permission.AI, "ai_plan"):
+            return None
         ai = self.ai_manager
         if ai is None:
             return None
@@ -324,6 +365,8 @@ class PluginContext:
         reasoning_prompt: str | None = None,
         required_capabilities: Any = None,
     ) -> Any:
+        if not self._check_permission(Permission.AI, "ai_reason"):
+            return None
         ai = self.ai_manager
         if ai is None:
             return None
@@ -351,6 +394,8 @@ class PluginContext:
         schema: dict,
         metadata: dict | None = None,
     ) -> Any:
+        if not self._check_permission(Permission.AI, "create_structured_schema"):
+            return None
         svc = self._registry.get_optional("structured_service") if self._registry else None
         if svc is None:
             return None
@@ -361,6 +406,8 @@ class PluginContext:
             return None
 
     def parse_structured(self, text: str, schema: Any) -> Any:
+        if not self._check_permission(Permission.AI, "parse_structured"):
+            return None
         svc = self._registry.get_optional("structured_service") if self._registry else None
         if svc is None:
             return None
@@ -375,6 +422,8 @@ class PluginContext:
     # ------------------------------------------------------------------
 
     def register_tool(self, tool: Any) -> None:
+        if not self._check_permission(Permission.AI, "register_tool"):
+            return
         registry = self.tool_registry
         if registry is None:
             return
@@ -384,12 +433,16 @@ class PluginContext:
             self.log_error("Failed to register tool")
 
     def unregister_tool(self, name: str) -> bool:
+        if not self._check_permission(Permission.AI, "unregister_tool"):
+            return False
         registry = self.tool_registry
         if registry is None:
             return False
         return registry.unregister(name)
 
     def list_tools(self) -> list:
+        if not self._check_permission(Permission.AI, "list_tools"):
+            return []
         registry = self.tool_registry
         if registry is None:
             return []
@@ -400,6 +453,8 @@ class PluginContext:
     # ------------------------------------------------------------------
 
     def register_template(self, template: Any) -> None:
+        if not self._check_permission(Permission.AI, "register_template"):
+            return
         registry = self.template_registry
         if registry is None:
             return
@@ -409,12 +464,16 @@ class PluginContext:
             self.log_error("Failed to register template")
 
     def unregister_template(self, name: str) -> bool:
+        if not self._check_permission(Permission.AI, "unregister_template"):
+            return False
         registry = self.template_registry
         if registry is None:
             return False
         return registry.unregister(name)
 
     def get_template(self, name: str) -> Any:
+        if not self._check_permission(Permission.AI, "get_template"):
+            return None
         registry = self.template_registry
         if registry is None:
             return None
@@ -425,6 +484,8 @@ class PluginContext:
     # ------------------------------------------------------------------
 
     def register_skill(self, skill: Any) -> None:
+        if not self._check_permission(Permission.SKILLS, "register_skill"):
+            return
         mgr = self.skill_manager
         if mgr is None:
             self.log_error("SkillManager not available")
@@ -442,6 +503,8 @@ class PluginContext:
             self.log_error(f"Failed to register skill {getattr(skill, 'name', '')}")
 
     def unregister_skill(self, intent: str) -> bool:
+        if not self._check_permission(Permission.SKILLS, "unregister_skill"):
+            return False
         mgr = self.skill_manager
         if mgr is None:
             return False

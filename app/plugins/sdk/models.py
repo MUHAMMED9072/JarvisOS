@@ -4,6 +4,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.plugins.sdk.security import Permission
+
 
 @dataclass
 class PluginDependency:
@@ -21,6 +23,7 @@ class PluginManifest:
     dependencies: list[PluginDependency] = field(default_factory=list)
     capabilities: list[str] = field(default_factory=list)
     config_schema: dict[str, Any] | None = None
+    permissions: list[str] = field(default_factory=list)
 
 
 _SEMVER_RE = re.compile(
@@ -78,6 +81,12 @@ def validate_manifest(manifest: PluginManifest) -> list[str]:
                 f"manifest.min_core_version {manifest.min_core_version!r} "
                 f"is not valid semver"
             )
+    if manifest.permissions:
+        for i, perm in enumerate(manifest.permissions):
+            if not Permission.is_valid(perm):
+                errors.append(
+                    f"manifest.permissions[{i}]: unknown permission {perm!r}"
+                )
     if not manifest.dependencies:
         return errors
     for i, dep in enumerate(manifest.dependencies):

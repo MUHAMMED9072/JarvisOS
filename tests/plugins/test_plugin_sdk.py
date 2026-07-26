@@ -17,6 +17,9 @@ from app.skills.base import Skill
 from app.skills.manager import SkillManager
 from app.skills.result import SkillResult
 from app.plugins.sdk import (
+    Permission,
+    PermissionDenied,
+    PermissionManager,
     Plugin,
     PluginConfig,
     PluginContext,
@@ -2166,3 +2169,497 @@ class TestPluginConfigBackwardCompat:
     def test_importable_from_app_plugins(self):
         from app.plugins import PluginConfig as PC
         assert PC is PluginConfig
+
+
+# ==========================================================================
+# P10-08 – Plugin Security & Permissions
+# ==========================================================================
+
+
+class TestPermissionConstants:
+    """Built-in permission types."""
+
+    def test_ai_permission(self):
+        assert Permission.AI == "ai"
+
+    def test_events_permission(self):
+        assert Permission.EVENTS == "events"
+
+    def test_services_permission(self):
+        assert Permission.SERVICES == "services"
+
+    def test_skills_permission(self):
+        assert Permission.SKILLS == "skills"
+
+    def test_config_permission(self):
+        assert Permission.CONFIG == "config"
+
+    def test_memory_permission(self):
+        assert Permission.MEMORY == "memory"
+
+    def test_filesystem_permission(self):
+        assert Permission.FILESYSTEM == "filesystem"
+
+    def test_network_permission(self):
+        assert Permission.NETWORK == "network"
+
+    def test_is_valid_known(self):
+        assert Permission.is_valid("ai")
+        assert Permission.is_valid("network")
+        assert not Permission.is_valid("unknown_perm")
+
+    def test_all_permissions(self):
+        all_perms = Permission.all_permissions()
+        assert len(all_perms) == 8
+        assert "ai" in all_perms
+        assert "events" in all_perms
+        assert "services" in all_perms
+        assert "skills" in all_perms
+        assert "config" in all_perms
+        assert "memory" in all_perms
+        assert "filesystem" in all_perms
+        assert "network" in all_perms
+
+    def test_all_frozenset(self):
+        assert isinstance(Permission._ALL, frozenset)
+        assert len(Permission._ALL) == 8
+
+
+class TestPermissionDenied:
+    """Security exception."""
+
+    def test_exception_message(self):
+        exc = PermissionDenied("my-plugin", "ai", "ai_ask")
+        assert "my-plugin" in str(exc)
+        assert "ai" in str(exc)
+        assert "ai_ask" in str(exc)
+
+    def test_exception_attributes(self):
+        exc = PermissionDenied("p", "svc", "register")
+        assert exc.plugin_name == "p"
+        assert exc.permission == "svc"
+        assert exc.action == "register"
+
+    def test_exception_no_action(self):
+        exc = PermissionDenied("p", "config")
+        assert "this operation" in str(exc)
+
+    def test_exception_is_exception(self):
+        assert issubclass(PermissionDenied, Exception)
+
+
+class TestPermissionManager:
+    """PermissionManager creation and checks."""
+
+    def test_no_permissions_grants_all(self):
+        pm = PermissionManager("test-plugin")
+        assert pm.has_all()
+        assert pm.check(Permission.AI)
+        assert pm.check(Permission.EVENTS)
+        assert pm.check(Permission.SERVICES)
+        assert pm.check(Permission.SKILLS)
+        assert pm.check(Permission.CONFIG)
+        assert pm.check(Permission.MEMORY)
+        assert pm.check(Permission.FILESYSTEM)
+        assert pm.check(Permission.NETWORK)
+
+    def test_explicit_permissions(self):
+        pm = PermissionManager("test-plugin", permissions=["ai", "events"])
+        assert pm.check(Permission.AI)
+        assert pm.check(Permission.EVENTS)
+        assert not pm.check(Permission.SERVICES)
+        assert not pm.check(Permission.SKILLS)
+        assert not pm.check(Permission.CONFIG)
+        assert not pm.check(Permission.MEMORY)
+
+    def test_invalid_permissions_ignored(self):
+        pm = PermissionManager("test-plugin", permissions=["ai", "invalid_perm"])
+        assert pm.check(Permission.AI)
+        assert not pm.check(Permission.EVENTS)
+
+    def test_empty_permissions_list_grants_all(self):
+        pm = PermissionManager("test-plugin", permissions=[])
+        assert pm.has_all()
+
+    def test_has_all_false(self):
+        pm = PermissionManager("test-plugin", permissions=["ai"])
+        assert not pm.has_all()
+
+    def test_require_passes(self):
+        pm = PermissionManager("test-plugin", permissions=["ai"])
+        pm.require(Permission.AI, "test")
+
+    def test_require_raises(self):
+        pm = PermissionManager("test-plugin", permissions=["ai"])
+        with pytest.raises(PermissionDenied) as exc_info:
+            pm.require(Permission.SERVICES, "register")
+        assert exc_info.value.plugin_name == "test-plugin"
+        assert exc_info.value.permission == "services"
+
+    def test_check_action_logged(self):
+        pm = PermissionManager("test-plugin", permissions=["ai"])
+        assert pm.check(Permission.AI, "custom_action")
+        assert not pm.check(Permission.SERVICES, "custom_action")
+
+    def test_to_list(self):
+        pm = PermissionManager("test-plugin", permissions=["ai", "events"])
+        plist = pm.to_list()
+        assert "ai" in plist
+        assert "events" in plist
+
+    def test_describe(self):
+        pm = PermissionManager("test-plugin", permissions=["ai"])
+        desc = pm.describe()
+        assert "ai" in desc
+
+    def test_permissions_property(self):
+        pm = PermissionManager("test-plugin", permissions=["ai"])
+        assert isinstance(pm.permissions, frozenset)
+        assert "ai" in pm.permissions
+
+
+class TestPluginManifestPermissions:
+    """Permission declarations in PluginManifest."""
+
+    def test_permissions_field_default_empty(self):
+        m = PluginManifest(name="test", version="1.0.0")
+        assert m.permissions == []
+
+    def test_permissions_field_set(self):
+        m = PluginManifest(
+            name="test", version="1.0.0",
+            permissions=["ai", "events"],
+        )
+        assert m.permissions == ["ai", "events"]
+
+    def test_manifest_with_permissions_validates(self):
+        m = PluginManifest(
+            name="test", version="1.0.0",
+            permissions=["ai", "events"],
+        )
+        errors = validate_manifest(m)
+        assert len(errors) == 0
+
+    def test_manifest_invalid_permission_fails(self):
+        m = PluginManifest(
+            name="test", version="1.0.0",
+            permissions=["ai", "hack_the_planet"],
+        )
+        errors = validate_manifest(m)
+        assert any("permissions" in e for e in errors)
+        assert any("hack_the_planet" in e for e in errors)
+
+
+class TestPluginContextPermissionEnforcement:
+    """Runtime permission enforcement in PluginContext."""
+
+    def test_no_permissions_allows_all(self):
+        ctx = PluginContext(None, "test-plugin")
+        assert ctx._check_permission(Permission.AI, "test")
+        assert ctx._check_permission(Permission.EVENTS, "test")
+        assert ctx._check_permission(Permission.SERVICES, "test")
+
+    def test_with_permissions_checks(self):
+        ctx = PluginContext(None, "test-plugin")
+        pm = PermissionManager("test-plugin", permissions=["ai"])
+        ctx.set_permissions(pm)
+        assert ctx._check_permission(Permission.AI, "test")
+        assert not ctx._check_permission(Permission.SERVICES, "test")
+        assert not ctx._check_permission(Permission.EVENTS, "test")
+
+
+class TestPluginContextAIPermissions:
+    """AI permission enforcement."""
+
+    @pytest.fixture
+    def ctx_no_ai(self):
+        ctx = PluginContext(None, "test-plugin")
+        pm = PermissionManager("test-plugin", permissions=["events"])
+        ctx.set_permissions(pm)
+        return ctx
+
+    def test_ai_ask_denied(self, ctx_no_ai):
+        assert ctx_no_ai.ai_ask("hello") is None
+
+    def test_ai_ask_stream_denied(self, ctx_no_ai):
+        assert ctx_no_ai.ai_ask_stream("openai", "hello") is None
+
+    def test_ai_plan_denied(self, ctx_no_ai):
+        assert ctx_no_ai.ai_plan("objective") is None
+
+    def test_ai_reason_denied(self, ctx_no_ai):
+        assert ctx_no_ai.ai_reason("objective") is None
+
+    def test_create_conversation_denied(self, ctx_no_ai):
+        assert ctx_no_ai.create_conversation() is None
+
+    def test_get_conversation_denied(self, ctx_no_ai):
+        assert ctx_no_ai.get_conversation("id") is None
+
+    def test_delete_conversation_denied(self, ctx_no_ai):
+        assert not ctx_no_ai.delete_conversation("id")
+
+    def test_register_tool_denied(self, ctx_no_ai):
+        ctx_no_ai.register_tool("tool")
+
+    def test_unregister_tool_denied(self, ctx_no_ai):
+        assert not ctx_no_ai.unregister_tool("tool")
+
+    def test_list_tools_denied(self, ctx_no_ai):
+        assert ctx_no_ai.list_tools() == []
+
+    def test_register_template_denied(self, ctx_no_ai):
+        ctx_no_ai.register_template("tmpl")
+
+    def test_unregister_template_denied(self, ctx_no_ai):
+        assert not ctx_no_ai.unregister_template("tmpl")
+
+    def test_get_template_denied(self, ctx_no_ai):
+        assert ctx_no_ai.get_template("tmpl") is None
+
+    def test_create_structured_schema_denied(self, ctx_no_ai):
+        assert ctx_no_ai.create_structured_schema("s", {}) is None
+
+    def test_parse_structured_denied(self, ctx_no_ai):
+        assert ctx_no_ai.parse_structured("text", {}) is None
+
+
+class TestPluginContextServicePermissions:
+    """Service permission enforcement."""
+
+    @pytest.fixture
+    def ctx_no_svc(self):
+        from app.core.registry import ServiceRegistry
+        reg = ServiceRegistry()
+        ctx = PluginContext(reg, "test-plugin")
+        pm = PermissionManager("test-plugin", permissions=["ai"])
+        ctx.set_permissions(pm)
+        return ctx
+
+    def test_register_service_denied(self, ctx_no_svc):
+        ctx_no_svc.register_service("svc", object())
+
+    def test_export_service_denied(self, ctx_no_svc):
+        ctx_no_svc.export_service("svc", object())
+
+    def test_list_services_allowed(self, ctx_no_svc):
+        result = ctx_no_svc.list_services()
+        assert isinstance(result, list)
+
+
+class TestPluginContextEventPermissions:
+    """Event permission enforcement."""
+
+    @pytest.fixture
+    def ctx_no_events(self):
+        bus = EventBus()
+        from app.core.registry import ServiceRegistry
+        reg = ServiceRegistry()
+        reg.register("event_bus", bus)
+        ctx = PluginContext(reg, "test-plugin")
+        pm = PermissionManager("test-plugin", permissions=["ai"])
+        ctx.set_permissions(pm)
+        return ctx
+
+    def test_subscribe_denied(self, ctx_no_events):
+        ctx_no_events.subscribe("test.event", lambda: None)
+
+    def test_publish_denied(self, ctx_no_events):
+        ctx_no_events.publish("test.event")
+
+    def test_unsubscribe_denied(self, ctx_no_events):
+        ctx_no_events.unsubscribe("test.event", lambda: None)
+
+    def test_publish_with_permission(self):
+        bus = EventBus()
+        from app.core.registry import ServiceRegistry
+        reg = ServiceRegistry()
+        reg.register("event_bus", bus)
+        ctx = PluginContext(reg, "test-plugin")
+        pm = PermissionManager("test-plugin", permissions=["events"])
+        ctx.set_permissions(pm)
+        received = []
+        bus.subscribe("test.event", lambda: received.append(1))
+        ctx.publish("test.event")
+        assert len(received) == 1
+
+
+class TestPluginContextSkillPermissions:
+    """Skill permission enforcement."""
+
+    @pytest.fixture
+    def ctx_no_skills(self):
+        from app.core.registry import ServiceRegistry
+        from app.skills.manager import SkillManager
+        reg = ServiceRegistry()
+        reg.register("skill_manager", SkillManager())
+        ctx = PluginContext(reg, "test-plugin")
+        pm = PermissionManager("test-plugin", permissions=["ai"])
+        ctx.set_permissions(pm)
+        return ctx
+
+    def test_register_skill_denied(self, ctx_no_skills):
+        skill = MagicMock()
+        skill.intent = "test.intent"
+        ctx_no_skills.register_skill(skill)
+
+    def test_unregister_skill_denied(self, ctx_no_skills):
+        assert not ctx_no_skills.unregister_skill("test.intent")
+
+
+class TestPluginContextConfigPermissions:
+    """Configuration permission enforcement."""
+
+    def test_config_set_denied(self):
+        ctx = PluginContext(None, "test-plugin")
+        pm = PermissionManager("test-plugin", permissions=["ai"])
+        ctx.set_permissions(pm)
+        ctx.config.set("key", "value")
+        assert ctx.config.get("key") is None
+
+    def test_config_clear_denied(self):
+        ctx = PluginContext(None, "test-plugin")
+        pm = PermissionManager("test-plugin", permissions=["ai"])
+        ctx.set_permissions(pm)
+        ctx.config.set("key", "value")
+        ctx.config.clear()
+
+    def test_config_update_denied(self):
+        ctx = PluginContext(None, "test-plugin")
+        pm = PermissionManager("test-plugin", permissions=["ai"])
+        ctx.set_permissions(pm)
+        ctx.config.update({"key": "value"})
+        assert ctx.config.get("key") is None
+
+    def test_config_save_denied(self):
+        ctx = PluginContext(None, "test-plugin")
+        pm = PermissionManager("test-plugin", permissions=["ai"])
+        ctx.set_permissions(pm)
+        ctx.config.save()
+
+    def test_config_set_defaults_denied(self):
+        ctx = PluginContext(None, "test-plugin")
+        pm = PermissionManager("test-plugin", permissions=["ai"])
+        ctx.set_permissions(pm)
+        ctx.config.set_defaults()
+
+    def test_config_get_allowed_without_permission(self):
+        ctx = PluginContext(None, "test-plugin")
+        pm = PermissionManager("test-plugin", permissions=["ai"])
+        ctx.set_permissions(pm)
+        assert ctx.config.get("key") is None
+        assert ctx.config.all() == {}
+
+    def test_config_set_allowed_with_permission(self):
+        ctx = PluginContext(None, "test-plugin")
+        pm = PermissionManager("test-plugin", permissions=["config"])
+        ctx.set_permissions(pm)
+        ctx.config.set("key", "value")
+        assert ctx.config.get("key") == "value"
+
+
+class TestPluginManagerPermissionLifecycle:
+    """PluginManager integrates permissions during load."""
+
+    def test_load_creates_permission_manager(self):
+        mgr = PluginManager()
+        class PermPlugin(Plugin):
+            name = "perm-test"
+            version = "1.0.0"
+            manifest = PluginManifest(
+                name="perm-test",
+                version="1.0.0",
+                permissions=["ai"],
+            )
+        mgr.register(PermPlugin())
+        mgr.load("perm-test")
+        plugin = mgr.get_plugin("perm-test")
+        assert plugin is not None
+        assert plugin.context is not None
+        assert plugin.context._permissions is not None
+        assert plugin.context._permissions.check(Permission.AI)
+        assert not plugin.context._permissions.check(Permission.SERVICES)
+
+    def test_load_without_permissions_grants_all(self):
+        mgr = PluginManager()
+        class NoPermPlugin(Plugin):
+            name = "noperm"
+            version = "1.0.0"
+        mgr.register(NoPermPlugin())
+        mgr.load("noperm")
+        plugin = mgr.get_plugin("noperm")
+        assert plugin is not None
+        assert plugin.context is not None
+        assert plugin.context._permissions is not None
+        assert plugin.context._permissions.has_all()
+
+    def test_load_uses_capabilities_as_fallback(self):
+        mgr = PluginManager()
+        class CapPlugin(Plugin):
+            name = "cap-test"
+            version = "1.0.0"
+            manifest = PluginManifest(
+                name="cap-test",
+                version="1.0.0",
+                capabilities=["ai"],
+            )
+        mgr.register(CapPlugin())
+        mgr.load("cap-test")
+        plugin = mgr.get_plugin("cap-test")
+        assert plugin is not None
+        assert plugin.context is not None
+        assert plugin.context._permissions.check(Permission.AI)
+        assert not plugin.context._permissions.check(Permission.SERVICES)
+
+    def test_load_selective_permissions(self):
+        mgr = PluginManager()
+        class SelectivePlugin(Plugin):
+            name = "selective"
+            version = "1.0.0"
+            manifest = PluginManifest(
+                name="selective",
+                version="1.0.0",
+                permissions=["ai", "services"],
+            )
+        mgr.register(SelectivePlugin())
+        mgr.load("selective")
+        plugin = mgr.get_plugin("selective")
+        assert plugin is not None
+        assert plugin.context is not None
+        assert plugin.context._permissions.check(Permission.AI)
+        assert plugin.context._permissions.check(Permission.SERVICES)
+        assert not plugin.context._permissions.check(Permission.EVENTS)
+
+
+class TestPluginSecurityBackwardCompat:
+    """Backward compatibility tests."""
+
+    def test_existing_api_unchanged(self):
+        from app.plugins import (
+            Permission as P,
+            PermissionDenied as PD,
+            PermissionManager as PM,
+        )
+        assert P is not None
+        assert issubclass(PD, Exception)
+        assert PM is not None
+
+    def test_plugin_without_manifest_gets_all_permissions(self):
+        mgr = PluginManager()
+        class SimplePlugin(Plugin):
+            name = "simple"
+            version = "1.0.0"
+        mgr.register(SimplePlugin())
+        mgr.load("simple")
+        plugin = mgr.get_plugin("simple")
+        assert plugin is not None
+        assert plugin.context is not None
+        assert plugin.context._permissions is None or plugin.context._permissions.has_all()
+
+    def test_register_service_works_without_permission_manager(self):
+        ctx = PluginContext(None, "test")
+        ctx.register_service("svc", object())
+
+    def test_subscribe_works_without_permission_manager(self):
+        ctx = PluginContext(None, "test")
+        ctx.subscribe("e", lambda: None)

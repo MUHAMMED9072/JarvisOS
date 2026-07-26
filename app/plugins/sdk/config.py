@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -37,12 +38,18 @@ class PluginConfig:
         self._auto_save = auto_save
         self._config_path: Path | None = None
         self._loaded = False
+        self._permission_checker: Callable[[str], bool] | None = None
 
         if config_dir is not None:
             self._config_path = Path(config_dir) / "config.json"
 
         if schema is not None:
             self.set_schema(schema)
+
+    def _set_permission_checker(
+        self, checker: Callable[[str], bool] | None,
+    ) -> None:
+        self._permission_checker = checker
 
     # ------------------------------------------------------------------
     # Schema
@@ -100,6 +107,8 @@ class PluginConfig:
             self._loaded = True
 
     def save(self) -> None:
+        if self._permission_checker and not self._permission_checker("config"):
+            return
         if self._config_path is None:
             return
         try:
@@ -196,6 +205,8 @@ class PluginConfig:
             return self._data.get(key, default)
 
     def set(self, key: str, value: Any) -> None:
+        if self._permission_checker and not self._permission_checker("config"):
+            return
         with self._lock:
             self._data[key] = value
         if self._auto_save:
@@ -207,6 +218,8 @@ class PluginConfig:
             return dict(self._data)
 
     def clear(self) -> None:
+        if self._permission_checker and not self._permission_checker("config"):
+            return
         with self._lock:
             self._data.clear()
         if self._auto_save:
@@ -214,6 +227,8 @@ class PluginConfig:
         self._publish("changed", {})
 
     def update(self, data: dict[str, Any]) -> None:
+        if self._permission_checker and not self._permission_checker("config"):
+            return
         with self._lock:
             self._data.update(data)
         if self._auto_save:
@@ -225,6 +240,8 @@ class PluginConfig:
     # ------------------------------------------------------------------
 
     def set_defaults(self) -> None:
+        if self._permission_checker and not self._permission_checker("config"):
+            return
         with self._lock:
             self._ensure_defaults()
         if self._auto_save:
