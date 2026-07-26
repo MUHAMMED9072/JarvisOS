@@ -202,3 +202,72 @@ class ModelInfo(BaseModel):
 
 class ModelListResponse(BaseModel):
     models: list[ModelInfo]
+
+
+# ==========================================================================
+# Skills
+# ==========================================================================
+
+
+class SkillInfo(BaseModel):
+    name: str = Field(..., description="Skill name")
+    intent: str = Field(..., description="Skill intent identifier")
+    description: str = Field("", description="Skill description")
+    version: str = Field("1.0.0", description="Skill version")
+    author: str = Field("JarvisOS", description="Skill author")
+    enabled: bool = Field(True, description="Whether the skill is enabled")
+    category: str = Field("", description="Skill category derived from module path")
+
+
+class SkillListResponse(BaseModel):
+    skills: list[SkillInfo]
+
+
+class SkillExecuteRequest(BaseModel):
+    text: str = Field(..., description="Input text for the skill")
+    brain: str | None = Field(None, description="Brain type (fast/smart/deep)")
+    source: str = Field("api", description="Source identifier")
+
+
+class SkillExecuteResponse(BaseModel):
+    success: bool = Field(..., description="Whether execution succeeded")
+    message: str = Field("", description="Result message")
+    data: dict[str, Any] = Field(default_factory=dict, description="Structured result data")
+    execution_time: float = Field(0.0, description="Execution time in seconds")
+    skill: str = Field("", description="Name of the skill that executed")
+
+
+class SkillIntentInfo(BaseModel):
+    name: str = Field(..., description="Skill name")
+    intent: str = Field(..., description="Intent identifier")
+    description: str = Field("", description="Skill description")
+
+
+class SkillIntentListResponse(BaseModel):
+    intents: list[SkillIntentInfo]
+
+
+class SkillCategoryInfo(BaseModel):
+    name: str = Field(..., description="Category name")
+    count: int = Field(0, description="Number of skills in this category")
+
+
+class SkillCategoryListResponse(BaseModel):
+    categories: list[SkillCategoryInfo]
+
+
+class SkillReloadRequest(BaseModel):
+    intent: str | None = Field(None, description="Intent to reload (omit or use all for full reload)")
+    all: bool = Field(False, description="Reload all skills")
+
+
+class SkillReloadResponse(BaseModel):
+    status: str = Field(..., description="Reload status")
+    message: str = Field("", description="Status message")
+    intents: list[str] = Field(default_factory=list, description="Intents reloaded")
+
+
+class SkillDiscoverResponse(BaseModel):
+    status: str = Field(..., description="Discovery status")
+    count: int = Field(0, description="Number of skills discovered")
+    skills: list[str] = Field(default_factory=list, description="Discovered skill intents")

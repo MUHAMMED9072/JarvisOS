@@ -8,9 +8,11 @@ def register_routes(app: FastAPI) -> None:
     from app.api.routes.config import router as config_router
     from app.api.routes.services import router as services_router
     from app.api.routes.ai import router as ai_router
+    from app.api.routes.skills import router as skills_router
 
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(status_router, prefix="/api/v1")
     app.include_router(config_router, prefix="/api/v1")
     app.include_router(services_router, prefix="/api/v1")
     app.include_router(ai_router)
+    app.include_router(skills_router)
