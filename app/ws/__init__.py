@@ -13,6 +13,13 @@ from app.ws.events import (
 )
 from app.ws.manager import WebSocketConnectionManager, ConnectionInfo
 from app.ws.rate_limiter import RateLimiter
+from app.ws.reliability import (
+    ConnectionStats,
+    OfflineQueue,
+    RetryQueue,
+    compress_payload,
+    decompress_payload,
+)
 from app.ws.schemas import (
     ClientMessage,
     ServerMessage,
@@ -33,12 +40,15 @@ __all__ = [
     "AuthSession",
     "CommandExecutionManager",
     "ConnectionInfo",
+    "ConnectionStats",
     "FileTransferManager",
     "ClientMessage",
     "EventEnvelope",
     "EventReplayBuffer",
     "EventStreamBridge",
+    "OfflineQueue",
     "RateLimiter",
+    "RetryQueue",
     "ServerMessage",
     "SessionStore",
     "WSMessageType",
@@ -51,6 +61,8 @@ __all__ = [
     "WSLeftMessage",
     "WSMessage",
     "WebSocketConnectionManager",
+    "compress_payload",
+    "decompress_payload",
     "get_matching_subscriptions",
     "make_envelope",
     "match_event",

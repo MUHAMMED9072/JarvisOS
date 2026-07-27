@@ -77,3 +77,23 @@ class PluginConfigEvents:
     SAVED = "plugin.config.saved"
     RELOADED = "plugin.config.reloaded"
     VALIDATION_ERROR = "plugin.config.validation_error"
+
+
+class WSReliabilityEvents:
+    """WebSocket reliability & resilience event name constants for the EventBus."""
+
+    ACK_RECEIVED = "ws.ack.received"
+    ACK_TIMEOUT = "ws.ack.timeout"
+    RETRY_EXHAUSTED = "ws.retry.exhausted"
+    RETRY_SCHEDULED = "ws.retry.scheduled"
+
+    RECONNECT_SUCCESS = "ws.reconnect.success"
+    RECONNECT_FAIL = "ws.reconnect.fail"
+    RECONNECT_TOKEN_GENERATED = "ws.reconnect.token_generated"
+    RECONNECT_TOKEN_REVOKED = "ws.reconnect.token_revoked"
+
+    OFFLINE_QUEUE_DRAINED = "ws.offline_queue.drained"
+    OFFLINE_QUEUE_OVERFLOW = "ws.offline_queue.overflow"
+
+    STATS_REPORT = "ws.stats.report"
+    LATENCY_UPDATE = "ws.latency.update"

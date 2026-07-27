@@ -18,6 +18,7 @@ async def websocket_endpoint(
     websocket: WebSocket,
     token: str | None = Query(None, description="Optional auth token"),
     client_id: str | None = Query(None, description="Optional client identifier"),
+    reconnect_token: str | None = Query(None, description="Optional reconnect token"),
 ):
     manager: WebSocketConnectionManager | None = getattr(
         websocket.app.state, "ws_manager", None,
@@ -42,7 +43,10 @@ async def websocket_endpoint(
         websocket.app.state, "admin_manager", None,
     )
 
-    info = await manager.connect(websocket, client_id=client_id, token=token)
+    info = await manager.connect(
+        websocket, client_id=client_id, token=token,
+        reconnect_token=reconnect_token,
+    )
     if info is None:
         return
 

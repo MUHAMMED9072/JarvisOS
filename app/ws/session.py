@@ -18,6 +18,11 @@ class AuthSession:
     auth_method: str = "anonymous"
     is_authenticated: bool = False
 
+    # Reconnection support (P12-09)
+    reconnect_token: str = ""
+    reconnect_token_expires: float = 0.0
+    state_snapshot: dict[str, Any] = field(default_factory=dict)
+
     @property
     def is_expired(self) -> bool:
         return time.monotonic() > self.expires_at
@@ -25,6 +30,18 @@ class AuthSession:
     @property
     def time_remaining(self) -> float:
         return max(0.0, self.expires_at - time.monotonic())
+
+    def set_reconnect_token(
+        self, token: str, ttl: float = 300.0,
+    ) -> None:
+        self.reconnect_token = token
+        self.reconnect_token_expires = time.monotonic() + ttl
+
+    @property
+    def reconnect_token_valid(self) -> bool:
+        if not self.reconnect_token:
+            return False
+        return time.monotonic() < self.reconnect_token_expires
 
 
 class SessionStore:

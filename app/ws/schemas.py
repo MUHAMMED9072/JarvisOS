@@ -19,6 +19,11 @@ class WSMessageType(str, Enum):
     AI_STREAM_START = "ai.stream.start"
     AI_STREAM_CANCEL = "ai.stream.cancel"
 
+    # Client -> Server: Reliability (P12-09)
+    ACK = "ack"
+    CONNECT = "connect"
+    HEARTBEAT_ACK = "heartbeat_ack"
+
     # Server -> Client
     PONG = "pong"
     SUBSCRIBED = "subscribed"
@@ -98,6 +103,13 @@ class WSMessageType(str, Enum):
     AUTH_EXPIRED = "auth.expired"
     AUTH_DENIED = "auth.denied"
 
+    # Server -> Client: Reliability (P12-09)
+    HEARTBEAT = "heartbeat"
+    RECONNECT_TOKEN = "reconnect.token"
+    RECONNECT_SUCCESS = "reconnect.success"
+    RECONNECT_FAIL = "reconnect.fail"
+    RECONNECT_STATE = "reconnect.state"
+
     # System Monitor
     SYSTEM_METRICS = "system.metrics"
     SYSTEM_HEALTH = "system.health"
@@ -112,6 +124,7 @@ class ClientMessage(BaseModel):
     target: str | None = Field(None, description="Target client ID for directed messages")
     room: str | None = Field(None, description="Room name for join/leave/room messages")
     event: str | None = Field(None, description="Event type for subscribe/unsubscribe")
+    message_id: str | None = Field(None, description="Message ID for ACK correlation")
 
 
 class ServerMessage(BaseModel):
@@ -123,6 +136,7 @@ class ServerMessage(BaseModel):
     room: str | None = Field(None, description="Room name")
     event: str | None = Field(None, description="Event type")
     timestamp: str = Field("", description="ISO-8601 timestamp")
+    message_id: str | None = Field(None, description="Unique message ID for ACK tracking")
 
 
 class WSPongMessage(ServerMessage):

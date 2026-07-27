@@ -106,6 +106,34 @@ class Config:
     ]
 
     # ======================================================
+    # WEBSOCKET RELIABILITY & RESILIENCE (P12-09)
+    # ======================================================
+
+    WS_HEARTBEAT_ENABLED = True
+    WS_ACTIVE_HEARTBEAT_ENABLED = True
+    WS_HEARTBEAT_INTERVAL = 30.0
+    WS_HEARTBEAT_TIMEOUT = 10.0
+
+    WS_ACK_ENABLED = True
+    WS_ACK_TIMEOUT = 30.0
+    WS_MAX_RETRIES = 3
+    WS_RETRY_INTERVAL = 5.0
+    WS_RELIABLE_SEND_ENABLED = True
+
+    WS_OFFLINE_QUEUE_ENABLED = True
+    WS_OFFLINE_QUEUE_MAXSIZE = 100
+    WS_OFFLINE_QUEUE_OVERFLOW = "drop_oldest"
+
+    WS_RECONNECT_ENABLED = True
+    WS_RECONNECT_TOKEN_EXPIRY = 300.0
+
+    WS_STATS_ENABLED = True
+    WS_MAX_EVENT_QUEUE_SIZE = 100
+
+    WS_COMPRESSION_ENABLED = False
+    WS_COMPRESSION_MIN_SIZE = 4096
+
+    # ======================================================
     # APPLICATIONS
     # ======================================================
 
