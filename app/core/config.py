@@ -144,6 +144,18 @@ class Config:
     WS_ENABLE_RUNTIME_CONFIG = True
 
     # ======================================================
+    # DESKTOP CLIENT (P13-01)
+    # ======================================================
+
+    CLIENT_API_URL = "http://localhost:8000"
+    CLIENT_WS_URL = "ws://localhost:8000/api/v1/ws"
+    CLIENT_TIMEOUT = 30.0
+    CLIENT_RETRY_COUNT = 3
+    CLIENT_HEARTBEAT = 30.0
+    CLIENT_AUTO_RECONNECT = True
+    CLIENT_LOG_LEVEL = "INFO"
+
+    # ======================================================
     # APPLICATIONS
     # ======================================================
 
