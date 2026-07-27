@@ -462,3 +462,90 @@ class MemorySessionDetailResponse(BaseModel):
     last_application: str | None = Field(None, description="Last application context")
     last_skill: str | None = Field(None, description="Last skill used")
     message_count: int = Field(0, description="Number of messages in session")
+
+
+# ==========================================================================
+# Evolution (P11-07)
+# ==========================================================================
+
+
+class EvolutionStatusResponse(BaseModel):
+    version: str = Field(..., description="Current version string")
+    files: int = Field(0, description="Number of Python files")
+    lines: int = Field(0, description="Total lines of code")
+    hash: str = Field("", description="SHA-256 hash of the codebase")
+
+
+class EvolutionScanRequest(BaseModel):
+    root: str = Field("app", description="Root directory to scan")
+
+
+class EvolutionScanResponse(BaseModel):
+    status: str = Field(..., description="Scan status")
+    python_files: int = Field(0, description="Number of Python files found")
+    classes: int = Field(0, description="Number of classes found")
+    functions: int = Field(0, description="Number of functions found")
+    imports: int = Field(0, description="Number of imports found")
+    summary: dict[str, Any] = Field(default_factory=dict, description="Scan summary")
+
+
+class EvolutionPlanRequest(BaseModel):
+    objective: str = Field("", description="Optional objective for the plan")
+
+
+class EvolutionPlanResponse(BaseModel):
+    status: str = Field(..., description="Plan status")
+    plan: str = Field("", description="Generated evolution plan text")
+    plan_path: str = Field("", description="Path where the plan was written")
+
+
+class EvolutionGenerateRequest(BaseModel):
+    task: str = Field(..., min_length=1, description="Task description for code generation")
+    target_file: str = Field(..., min_length=1, description="Target file to modify")
+
+
+class EvolutionGenerateResponse(BaseModel):
+    status: str = Field(..., description="Generation status")
+    output_path: str = Field("", description="Path to the generated patch file")
+
+
+class EvolutionAutofixRequest(BaseModel):
+    review_file: str = Field("data/review_report.txt", description="Path to review report")
+    patch_file: str = Field("data/generated_patch.py", description="Path to patch file")
+
+
+class EvolutionAutofixResponse(BaseModel):
+    status: str = Field(..., description="Autofix status")
+    patch_file: str = Field("", description="Path to the fixed patch file")
+
+
+class EvolutionValidateRequest(BaseModel):
+    patch_path: str = Field("data/generated_patch.py", description="Path to patch file")
+
+
+class EvolutionValidateResponse(BaseModel):
+    valid: bool = Field(..., description="Whether the patch is valid")
+    report: list[str] = Field(default_factory=list, description="Validation report lines")
+
+
+class EvolutionSandboxRequest(BaseModel):
+    source: str = Field(..., description="Python source code to execute")
+
+
+class EvolutionSandboxResponse(BaseModel):
+    success: bool = Field(..., description="Whether execution succeeded")
+    returncode: int = Field(0, description="Process return code")
+    stdout: str = Field("", description="Standard output")
+    stderr: str = Field("", description="Standard error")
+    execution_time: float = Field(0.0, description="Execution time in seconds")
+    timed_out: bool = Field(False, description="Whether execution timed out")
+    security_violations: list[str] = Field(default_factory=list, description="Security violations detected")
+
+
+class EvolutionUpgradeResponse(BaseModel):
+    success: bool = Field(..., description="Whether the upgrade was triggered")
+    message: str = Field(..., description="Status message")
+
+
+class EvolutionHistoryResponse(BaseModel):
+    history: list[dict[str, Any]] = Field(default_factory=list, description="Evolution history entries")

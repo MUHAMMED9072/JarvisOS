@@ -25,10 +25,10 @@ class UpdateReport:
 class Updater:
     """Coordinates the self-upgrade workflow."""
 
-    def __init__(self) -> None:
+    def __init__(self, registry=None) -> None:
         self.analyzer = Analyzer()
-        self.planner = EvolutionPlanner()
-        self.generator = CodeGenerator()
+        self.planner = EvolutionPlanner(registry) if registry else None
+        self.generator = CodeGenerator(registry) if registry else None
         self.tester = TestRunner()
         self.benchmark = Benchmark()
         self.git = GitManager()
