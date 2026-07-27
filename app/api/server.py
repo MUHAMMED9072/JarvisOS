@@ -21,18 +21,28 @@ from app.ws.ai_stream import AIStreamManager
 from app.ws.auth import WSAuthenticator
 from app.ws.bridge import EventStreamBridge
 from app.ws.commands import CommandExecutionManager
+from app.ws.diagnostics import WebSocketDiagnostics
 from app.ws.file_transfer import FileTransferManager
+from app.ws.health import WebSocketHealthMonitor
+from app.ws.maintenance import WebSocketMaintenance
 from app.ws.manager import WebSocketConnectionManager
+from app.ws.metrics import WebsocketMetricsService
+from app.ws.runtime_config import WebSocketRuntimeConfig
 from app.ws.session import SessionStore
 
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Application lifespan: start monitor, yield, then clean up."""
+    """Application lifespan: start health monitor, yield, then clean up."""
     monitor: SystemMonitorService | None = getattr(app.state, "system_monitor", None)
     if monitor is not None:
         monitor.start()
+    ws_health: WebSocketHealthMonitor | None = getattr(app.state, "ws_health", None)
+    if ws_health is not None:
+        await ws_health.start()
     yield
+    if ws_health is not None:
+        await ws_health.stop()
     if monitor is not None:
         await monitor.stop()
     bridge: EventStreamBridge | None = getattr(app.state, "ws_bridge", None)
@@ -79,6 +89,7 @@ def create_app(
     _init_command_execution_manager(app)
     _init_file_transfer_manager(app)
     _init_system_monitor(app)
+    _init_ws_observability(app)
     _init_admin_manager(app)
 
     register_routes(app)
@@ -135,6 +146,52 @@ def _init_command_execution_manager(app: FastAPI) -> None:
     app.state.command_execution_manager = mgr
 
 
+def _init_ws_observability(app: FastAPI) -> None:
+    """Create metrics, health, diagnostics, maintenance, and runtime config."""
+    from app.core.config import Config
+
+    ws_mgr = app.state.ws_manager
+    registry: ServiceRegistry | None = getattr(app.state, "registry", None)
+    event_bus = registry.get_optional("event_bus") if registry else None
+    authenticator = app.state.ws_authenticator
+
+    metrics = WebsocketMetricsService(ws_manager=ws_mgr, event_bus=event_bus)
+    app.state.ws_metrics = metrics
+
+    health = WebSocketHealthMonitor(
+        ws_manager=ws_mgr,
+        metrics_service=metrics,
+        event_bus=event_bus,
+        interval=Config.WS_HEALTH_INTERVAL,
+    )
+    app.state.ws_health = health
+
+    session_store = getattr(authenticator, "_session_store", None)
+
+    runtime_config = WebSocketRuntimeConfig(ws_manager=ws_mgr, config=Config)
+    app.state.ws_runtime_config = runtime_config
+
+    diagnostics = WebSocketDiagnostics(
+        ws_manager=ws_mgr,
+        session_store=session_store,
+        authenticator=authenticator,
+        metrics_service=metrics,
+        health_monitor=health,
+        runtime_config=runtime_config,
+    )
+    app.state.ws_diagnostics = diagnostics
+
+    maintenance = WebSocketMaintenance(
+        ws_manager=ws_mgr,
+        session_store=session_store,
+        authenticator=authenticator,
+        metrics_service=metrics,
+        runtime_config=runtime_config,
+        event_bus=event_bus,
+    )
+    app.state.ws_maintenance = maintenance
+
+
 def _init_admin_manager(app: FastAPI) -> None:
     """Create the remote administration manager."""
     registry: ServiceRegistry | None = getattr(app.state, "registry", None)
@@ -147,6 +204,11 @@ def _init_admin_manager(app: FastAPI) -> None:
         registry=registry,
         kernel=kernel,
         system_monitor=monitor,
+        ws_metrics=getattr(app.state, "ws_metrics", None),
+        ws_health=getattr(app.state, "ws_health", None),
+        ws_diagnostics=getattr(app.state, "ws_diagnostics", None),
+        ws_maintenance=getattr(app.state, "ws_maintenance", None),
+        ws_runtime_config=getattr(app.state, "ws_runtime_config", None),
     )
     app.state.admin_manager = mgr
 

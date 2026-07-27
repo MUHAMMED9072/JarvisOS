@@ -97,3 +97,12 @@ class WSReliabilityEvents:
 
     STATS_REPORT = "ws.stats.report"
     LATENCY_UPDATE = "ws.latency.update"
+
+
+class WSProductionEvents:
+    """WebSocket production features & observability event name constants (P12-10)."""
+
+    METRICS_UPDATED = "ws.metrics.updated"
+    HEALTH_CHANGED = "ws.health.changed"
+    DIAGNOSTICS_GENERATED = "ws.diagnostics.generated"
+    MAINTENANCE_COMPLETED = "ws.maintenance.completed"

@@ -134,6 +134,16 @@ class Config:
     WS_COMPRESSION_MIN_SIZE = 4096
 
     # ======================================================
+    # WEBSOCKET PRODUCTION FEATURES & OBSERVABILITY (P12-10)
+    # ======================================================
+
+    WS_METRICS_ENABLED = True
+    WS_HEALTH_INTERVAL = 30.0
+    WS_DIAGNOSTIC_HISTORY = 10
+    WS_MAX_DIAGNOSTICS = 50
+    WS_ENABLE_RUNTIME_CONFIG = True
+
+    # ======================================================
     # APPLICATIONS
     # ======================================================
 

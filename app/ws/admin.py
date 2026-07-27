@@ -16,7 +16,9 @@ class AdminManager:
     """Remote administration over WebSocket connections.
 
     Provides server introspection, plugin/skill/memory/voice/monitor
-    management, runtime configuration queries, and lifecycle control.
+    management, runtime configuration queries, lifecycle control,
+    and WebSocket observability (metrics, health, diagnostics,
+    maintenance, runtime config).
     """
 
     def __init__(
@@ -26,11 +28,21 @@ class AdminManager:
         *,
         kernel: Any = None,
         system_monitor: Any = None,
+        ws_metrics: Any = None,
+        ws_health: Any = None,
+        ws_diagnostics: Any = None,
+        ws_maintenance: Any = None,
+        ws_runtime_config: Any = None,
     ) -> None:
         self._ws = ws_manager
         self._registry = registry
         self._kernel = kernel
         self._monitor = system_monitor
+        self._ws_metrics = ws_metrics
+        self._ws_health = ws_health
+        self._ws_diagnostics = ws_diagnostics
+        self._ws_maintenance = ws_maintenance
+        self._ws_runtime_config = ws_runtime_config
 
     # ------------------------------------------------------------------
     # Incoming message routing
@@ -70,6 +82,13 @@ class AdminManager:
             "admin.voice": self._handle_voice,
             "admin.monitor": self._handle_monitor,
             "admin.config": self._handle_config,
+            # P12-10 WS Observability
+            "admin.ws.metrics": self._handle_ws_metrics,
+            "admin.ws.health": self._handle_ws_health,
+            "admin.ws.diagnostics": self._handle_ws_diagnostics,
+            "admin.ws.reset_metrics": self._handle_ws_reset_metrics,
+            "admin.ws.maintenance": self._handle_ws_maintenance,
+            "admin.ws.runtime_config": self._handle_ws_runtime_config,
         }
 
     # ------------------------------------------------------------------
@@ -546,6 +565,144 @@ class AdminManager:
             await self._respond(client_id, payload, "admin.config", all_config)
 
     # ------------------------------------------------------------------
+    # P12-10: WebSocket Observability
+    # ------------------------------------------------------------------
+
+    async def _handle_ws_metrics(
+        self,
+        client_id: str,
+        payload: dict[str, Any],
+    ) -> None:
+        if self._ws_metrics is None:
+            await self._err(client_id, payload, "metrics service not available")
+            return
+        try:
+            snap = await self._ws_metrics.snapshot()
+            await self._respond(client_id, payload, "admin.ws.metrics", snap)
+        except Exception as exc:
+            await self._err(client_id, payload, str(exc))
+
+    async def _handle_ws_health(
+        self,
+        client_id: str,
+        payload: dict[str, Any],
+    ) -> None:
+        if self._ws_health is None:
+            await self._err(client_id, payload, "health monitor not available")
+            return
+        try:
+            report = await self._ws_health.evaluate()
+            await self._respond(client_id, payload, "admin.ws.health", report)
+        except Exception as exc:
+            await self._err(client_id, payload, str(exc))
+
+    async def _handle_ws_diagnostics(
+        self,
+        client_id: str,
+        payload: dict[str, Any],
+    ) -> None:
+        if self._ws_diagnostics is None:
+            await self._err(client_id, payload, "diagnostics not available")
+            return
+        try:
+            report = await self._ws_diagnostics.generate()
+            await self._respond(client_id, payload, "admin.ws.diagnostics", report)
+        except Exception as exc:
+            await self._err(client_id, payload, str(exc))
+
+    async def _handle_ws_reset_metrics(
+        self,
+        client_id: str,
+        payload: dict[str, Any],
+    ) -> None:
+        if not await self._check_permission(client_id, "admin.ws.reset_metrics"):
+            await self._err(client_id, payload, "permission denied")
+            return
+        if self._ws_metrics is None:
+            await self._err(client_id, payload, "metrics service not available")
+            return
+        try:
+            await self._ws_metrics.reset()
+            await self._respond(client_id, payload, "admin.ws.reset_metrics", {"success": True})
+        except Exception as exc:
+            await self._err(client_id, payload, str(exc))
+
+    async def _handle_ws_maintenance(
+        self,
+        client_id: str,
+        payload: dict[str, Any],
+    ) -> None:
+        if not await self._check_permission(client_id, "admin.ws.maintenance"):
+            await self._err(client_id, payload, "permission denied")
+            return
+        if self._ws_maintenance is None:
+            await self._err(client_id, payload, "maintenance service not available")
+            return
+        try:
+            action = payload.get("action", "run_all")
+            operations = {
+                "clear_retry_queues": self._ws_maintenance.clear_retry_queues,
+                "clear_offline_queues": self._ws_maintenance.clear_offline_queues,
+                "clear_inactive_sessions": self._ws_maintenance.clear_inactive_sessions,
+                "prune_expired_tokens": self._ws_maintenance.prune_expired_tokens,
+                "prune_expired_acks": self._ws_maintenance.prune_expired_acks,
+                "reset_metrics": self._ws_maintenance.reset_metrics,
+                "run_all": self._ws_maintenance.run_all,
+            }
+            handler = operations.get(action)
+            if handler is None:
+                await self._err(client_id, payload, f"unknown maintenance action: {action}")
+                return
+            client_filter = payload.get("client_id")
+            if action in ("clear_retry_queues", "clear_offline_queues") and client_filter:
+                result = await handler(client_id=client_filter)
+            else:
+                result = await handler()
+            result["action"] = action
+            await self._respond(client_id, payload, "admin.ws.maintenance", result)
+        except Exception as exc:
+            await self._err(client_id, payload, str(exc))
+
+    async def _handle_ws_runtime_config(
+        self,
+        client_id: str,
+        payload: dict[str, Any],
+    ) -> None:
+        if not await self._check_permission(client_id, "admin.ws.runtime_config"):
+            await self._err(client_id, payload, "permission denied")
+            return
+        if self._ws_runtime_config is None:
+            await self._err(client_id, payload, "runtime config not available")
+            return
+        try:
+            action = payload.get("action", "get")
+            if action == "get":
+                key = payload.get("key")
+                if key:
+                    result = {"key": key, "value": self._ws_runtime_config.get(key)}
+                else:
+                    result = {"config": self._ws_runtime_config.get_all()}
+            elif action == "set":
+                key = payload.get("key")
+                value = payload.get("value")
+                if not key:
+                    await self._err(client_id, payload, "key is required for set")
+                    return
+                ok = self._ws_runtime_config.set(key, value)
+                result = {"key": key, "set": ok}
+            elif action == "reset":
+                key = payload.get("key")
+                self._ws_runtime_config.reset(key=key)
+                result = {"reset": True}
+            else:
+                await self._err(client_id, payload, f"unknown action: {action}")
+                return
+            result["action"] = action
+            await self._respond(client_id, payload, "admin.ws.runtime_config", result)
+        except Exception as exc:
+            await self._err(client_id, payload, str(exc))
+
+    # ------------------------------------------------------------------
     # Response helpers
     # ------------------------------------------------------------------
 
@@ -611,5 +768,11 @@ def _ws_type(response_type: str) -> WSMessageType:
         "admin.voice": WSMessageType.ADMIN_VOICE_RESPONSE,
         "admin.monitor": WSMessageType.ADMIN_MONITOR_RESPONSE,
         "admin.config": WSMessageType.ADMIN_CONFIG_RESPONSE,
+        "admin.ws.metrics": WSMessageType.ADMIN_WS_METRICS_RESPONSE,
+        "admin.ws.health": WSMessageType.ADMIN_WS_HEALTH_RESPONSE,
+        "admin.ws.diagnostics": WSMessageType.ADMIN_WS_DIAGNOSTICS_RESPONSE,
+        "admin.ws.reset_metrics": WSMessageType.ADMIN_WS_RESET_METRICS_RESPONSE,
+        "admin.ws.maintenance": WSMessageType.ADMIN_WS_MAINTENANCE_RESPONSE,
+        "admin.ws.runtime_config": WSMessageType.ADMIN_WS_RUNTIME_CONFIG_RESPONSE,
     }
     return mapping.get(response_type, WSMessageType.ADMIN_ERROR)

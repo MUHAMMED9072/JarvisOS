@@ -52,6 +52,14 @@ class WSMessageType(str, Enum):
     ADMIN_MONITOR = "admin.monitor"
     ADMIN_CONFIG = "admin.config"
 
+    # Client -> Server: WS Observability (P12-10)
+    ADMIN_WS_METRICS = "admin.ws.metrics"
+    ADMIN_WS_HEALTH = "admin.ws.health"
+    ADMIN_WS_DIAGNOSTICS = "admin.ws.diagnostics"
+    ADMIN_WS_RESET_METRICS = "admin.ws.reset_metrics"
+    ADMIN_WS_MAINTENANCE = "admin.ws.maintenance"
+    ADMIN_WS_RUNTIME_CONFIG = "admin.ws.runtime_config"
+
     # Server -> Client: Remote Administration (P12-07)
     ADMIN_PONG = "admin.pong"
     ADMIN_STATUS_RESPONSE = "admin.status"
@@ -65,6 +73,16 @@ class WSMessageType(str, Enum):
     ADMIN_VOICE_RESPONSE = "admin.voice"
     ADMIN_MONITOR_RESPONSE = "admin.monitor"
     ADMIN_CONFIG_RESPONSE = "admin.config"
+
+    # Server -> Client: WS Observability (P12-10)
+    ADMIN_WS_METRICS_RESPONSE = "admin.ws.metrics"
+    ADMIN_WS_HEALTH_RESPONSE = "admin.ws.health"
+    ADMIN_WS_DIAGNOSTICS_RESPONSE = "admin.ws.diagnostics"
+    ADMIN_WS_RESET_METRICS_RESPONSE = "admin.ws.reset_metrics"
+    ADMIN_WS_MAINTENANCE_RESPONSE = "admin.ws.maintenance"
+    ADMIN_WS_RUNTIME_CONFIG_RESPONSE = "admin.ws.runtime_config"
+    ADMIN_WS_MAINTENANCE_RUN_ALL = "admin.ws.maintenance_run_all"
+
     ADMIN_ERROR = "admin.error"
 
     # Client -> Server: Remote Command Execution (P12-05)

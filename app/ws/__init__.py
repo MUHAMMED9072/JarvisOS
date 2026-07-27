@@ -3,6 +3,7 @@ from app.ws.ai_stream import AIStreamManager
 from app.ws.auth import WSAuthenticator
 from app.ws.bridge import EventStreamBridge
 from app.ws.commands import CommandExecutionManager
+from app.ws.diagnostics import WebSocketDiagnostics
 from app.ws.file_transfer import FileTransferManager
 from app.ws.events import (
     EventEnvelope,
@@ -11,7 +12,10 @@ from app.ws.events import (
     make_envelope,
     match_event,
 )
+from app.ws.health import WebSocketHealthMonitor
+from app.ws.maintenance import WebSocketMaintenance
 from app.ws.manager import WebSocketConnectionManager, ConnectionInfo
+from app.ws.metrics import WebsocketMetricsService
 from app.ws.rate_limiter import RateLimiter
 from app.ws.reliability import (
     ConnectionStats,
@@ -20,6 +24,7 @@ from app.ws.reliability import (
     compress_payload,
     decompress_payload,
 )
+from app.ws.runtime_config import WebSocketRuntimeConfig
 from app.ws.schemas import (
     ClientMessage,
     ServerMessage,
@@ -61,6 +66,11 @@ __all__ = [
     "WSLeftMessage",
     "WSMessage",
     "WebSocketConnectionManager",
+    "WebSocketDiagnostics",
+    "WebSocketHealthMonitor",
+    "WebSocketMaintenance",
+    "WebSocketRuntimeConfig",
+    "WebsocketMetricsService",
     "compress_payload",
     "decompress_payload",
     "get_matching_subscriptions",

@@ -26,3 +26,5 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(memory_router)
     app.include_router(evolution_router)
     app.include_router(ws_router)
+    from app.api.routes.ws_rest import router as ws_rest_router
+    app.include_router(ws_rest_router)
