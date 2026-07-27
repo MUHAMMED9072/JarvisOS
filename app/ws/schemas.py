@@ -33,6 +33,35 @@ class WSMessageType(str, Enum):
     AI_STREAM_ERROR = "ai.stream.error"
     AI_STREAM_STARTED = "ai.stream.started"
 
+    # Client -> Server: Remote Administration (P12-07)
+    ADMIN_PING = "admin.ping"
+    ADMIN_STATUS = "admin.status"
+    ADMIN_INFO = "admin.info"
+    ADMIN_SHUTDOWN = "admin.shutdown"
+    ADMIN_RESTART = "admin.restart"
+    ADMIN_CLIENTS = "admin.clients"
+    ADMIN_PLUGINS = "admin.plugins"
+    ADMIN_SKILLS = "admin.skills"
+    ADMIN_MEMORY = "admin.memory"
+    ADMIN_VOICE = "admin.voice"
+    ADMIN_MONITOR = "admin.monitor"
+    ADMIN_CONFIG = "admin.config"
+
+    # Server -> Client: Remote Administration (P12-07)
+    ADMIN_PONG = "admin.pong"
+    ADMIN_STATUS_RESPONSE = "admin.status"
+    ADMIN_INFO_RESPONSE = "admin.info"
+    ADMIN_SHUTDOWN_RESPONSE = "admin.shutdown"
+    ADMIN_RESTART_RESPONSE = "admin.restart"
+    ADMIN_CLIENTS_RESPONSE = "admin.clients"
+    ADMIN_PLUGINS_RESPONSE = "admin.plugins"
+    ADMIN_SKILLS_RESPONSE = "admin.skills"
+    ADMIN_MEMORY_RESPONSE = "admin.memory"
+    ADMIN_VOICE_RESPONSE = "admin.voice"
+    ADMIN_MONITOR_RESPONSE = "admin.monitor"
+    ADMIN_CONFIG_RESPONSE = "admin.config"
+    ADMIN_ERROR = "admin.error"
+
     # Client -> Server: Remote Command Execution (P12-05)
     COMMAND_EXECUTE = "command.execute"
     COMMAND_CANCEL = "command.cancel"

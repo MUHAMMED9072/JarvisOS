@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
+from app.ws.admin import AdminManager
 from app.ws.ai_stream import AIStreamManager
 from app.ws.commands import CommandExecutionManager
 from app.ws.file_transfer import FileTransferManager
@@ -32,6 +33,9 @@ async def websocket_endpoint(
     ft_mgr: FileTransferManager | None = getattr(
         websocket.app.state, "file_transfer_manager", None,
     )
+    admin: AdminManager | None = getattr(
+        websocket.app.state, "admin_manager", None,
+    )
 
     info = await manager.connect(websocket, client_id=client_id, token=token)
     if info is None:
@@ -47,6 +51,8 @@ async def websocket_endpoint(
             if cmd_exec and await cmd_exec.try_handle_message(cid, raw):
                 continue
             if ft_mgr and await ft_mgr.try_handle_message(cid, raw):
+                continue
+            if admin and await admin.try_handle_message(cid, raw):
                 continue
             response = await manager.handle_message(cid, raw)
             if response is not None:

@@ -16,6 +16,7 @@ from app.api.middleware import register_middleware
 from app.api.routes import register_routes
 from app.core.registry import ServiceRegistry
 from app.monitor.service import SystemMonitorService
+from app.ws.admin import AdminManager
 from app.ws.ai_stream import AIStreamManager
 from app.ws.bridge import EventStreamBridge
 from app.ws.commands import CommandExecutionManager
@@ -76,6 +77,7 @@ def create_app(
     _init_command_execution_manager(app)
     _init_file_transfer_manager(app)
     _init_system_monitor(app)
+    _init_admin_manager(app)
 
     register_routes(app)
     register_middleware(app)
@@ -110,6 +112,22 @@ def _init_command_execution_manager(app: FastAPI) -> None:
         registry=registry,
     )
     app.state.command_execution_manager = mgr
+
+
+def _init_admin_manager(app: FastAPI) -> None:
+    """Create the remote administration manager."""
+    registry: ServiceRegistry | None = getattr(app.state, "registry", None)
+    if registry is None:
+        return
+    kernel = registry.get_optional("kernel")
+    monitor: SystemMonitorService | None = getattr(app.state, "system_monitor", None)
+    mgr = AdminManager(
+        ws_manager=app.state.ws_manager,
+        registry=registry,
+        kernel=kernel,
+        system_monitor=monitor,
+    )
+    app.state.admin_manager = mgr
 
 
 def _init_file_transfer_manager(app: FastAPI) -> None:
