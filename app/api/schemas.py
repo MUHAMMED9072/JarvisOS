@@ -338,3 +338,61 @@ class PluginPackageInfo(BaseModel):
 
 class PluginPackageListResponse(BaseModel):
     packages: list[PluginPackageInfo]
+
+
+# ==========================================================================
+# Voice (P11-05)
+# ==========================================================================
+
+
+class VoiceTranscribeResponse(BaseModel):
+    text: str = Field(..., description="Transcribed text")
+    confidence: float = Field(0.0, description="Transcription confidence (0.0–1.0)")
+    language: str = Field("en", description="Detected language")
+    duration_ms: float = Field(0.0, description="Audio duration in milliseconds")
+
+
+class VoiceProcessRequest(BaseModel):
+    text: str = Field(..., min_length=1, description="Text to process through the voice pipeline")
+    confidence: float = Field(0.0, ge=0.0, le=1.0, description="Transcription confidence")
+    session_id: str = Field("", description="Session identifier for conversation reuse")
+    session_metadata: dict[str, Any] | None = Field(None, description="Additional session metadata")
+
+
+class VoiceProcessResponse(BaseModel):
+    success: bool = Field(..., description="Whether processing succeeded")
+    response: str = Field(..., description="Response text")
+    provider: str = Field("", description="AI provider used")
+    model: str = Field("", description="AI model used")
+    conversation_id: str = Field("", description="Conversation ID for follow-up")
+    routing_strategy: str = Field("", description="Routing strategy used")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Response metadata")
+
+
+class VoiceListenActionResponse(BaseModel):
+    status: str = Field(..., description="Action status (ok/error)")
+    message: str = Field(..., description="Status message")
+
+
+class VoiceStatusResponse(BaseModel):
+    running: bool = Field(..., description="Whether the voice subsystem is running")
+    enabled: bool = Field(..., description="Whether voice is enabled in config")
+    speaker_enabled: bool = Field(False, description="Whether speaker (TTS) is enabled")
+    wake_word_enabled: bool = Field(False, description="Whether wake word detection is enabled")
+    vad_enabled: bool = Field(False, description="Whether VAD is enabled")
+    whisper_model: str = Field("base", description="Whisper model name")
+    language: str = Field("en", description="Voice language")
+    sample_rate: int = Field(16000, description="Audio sample rate")
+    record_seconds: int = Field(5, description="Fixed recording duration in seconds")
+
+
+class VoiceProviderInfo(BaseModel):
+    name: str = Field(..., description="Provider name")
+    type: str = Field(..., description="Provider type (whisper/speaker/listener)")
+    available: bool = Field(False, description="Whether the provider is available")
+    description: str = Field("", description="Provider description")
+    config: dict[str, Any] = Field(default_factory=dict, description="Provider configuration")
+
+
+class VoiceProviderListResponse(BaseModel):
+    providers: list[VoiceProviderInfo]
