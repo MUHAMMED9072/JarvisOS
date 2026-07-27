@@ -80,6 +80,32 @@ class Config:
     LOG_FILE = LOG_DIR / "jarvis.log"
 
     # ======================================================
+    # WEBSOCKET AUTHENTICATION
+    # ======================================================
+
+    WS_AUTH_ENABLED = True
+    WS_ANONYMOUS_ENABLED = True
+
+    WS_AUTH_TIMEOUT = 30.0
+    WS_SESSION_EXPIRY = 3600.0
+    WS_TOKEN_EXPIRY = 86400.0
+
+    WS_MAX_MESSAGES_PER_MINUTE = 120
+
+    WS_AUTH_API_KEYS: dict[str, list[str]] = {
+        "admin-key": ["admin"],
+        "user-key": ["user"],
+    }
+
+    WS_AUTH_BEARER_SECRET = "change-me-in-production"
+
+    WS_DEFAULT_ANONYMOUS_ROLES: list[str] = ["user"]
+    WS_DEFAULT_ANONYMOUS_PERMISSIONS: list[str] = [
+        "admin.ping", "admin.status", "admin.info",
+        "command.*", "ai.*", "filesystem.*",
+    ]
+
+    # ======================================================
     # APPLICATIONS
     # ======================================================
 

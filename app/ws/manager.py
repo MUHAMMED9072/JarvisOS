@@ -143,6 +143,18 @@ class WebSocketConnectionManager:
     def get_connection(self, client_id: str) -> ConnectionInfo | None:
         return self._connections.get(client_id)
 
+    async def update_metadata(
+        self,
+        client_id: str,
+        metadata: dict[str, Any],
+    ) -> bool:
+        async with self._lock:
+            info = self._connections.get(client_id)
+            if info is None:
+                return False
+            info.metadata.update(metadata)
+            return True
+
     async def get_active_count(self) -> int:
         async with self._lock:
             return len(self._connections)

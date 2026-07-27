@@ -58,6 +58,17 @@ class AIEvents:
     MEMORY_RETRIEVE = "ai.memory.retrieve"
 
 
+class AuthEvents:
+    """Authentication event name constants for the EventBus."""
+
+    AUTH_SUCCESS = "auth.success"
+    AUTH_FAILURE = "auth.failure"
+    AUTH_LOGOUT = "auth.logout"
+    AUTH_EXPIRED = "auth.expired"
+    AUTH_DENIED = "auth.denied"
+    AUTH_REFRESH = "auth.refresh"
+
+
 class PluginConfigEvents:
     """Plugin configuration event name constants for the EventBus."""
 

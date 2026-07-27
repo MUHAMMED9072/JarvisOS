@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import fnmatch
 import json
 import time
 import uuid
@@ -83,10 +84,24 @@ class AdminManager:
         info = self._ws.get_connection(client_id)
         if info is None:
             return False
-        roles = info.metadata.get("roles", [])
+        metadata = info.metadata or {}
+        if not isinstance(metadata, dict):
+            return True
+        session_id = metadata.get("session_id")
+        if not session_id:
+            return True
+        roles = metadata.get("roles", [])
         if "admin" in roles:
             return True
-        return True
+        permissions = metadata.get("permissions", set())
+        if isinstance(permissions, list):
+            permissions = set(permissions)
+        if permission in permissions:
+            return True
+        for perm_pattern in permissions:
+            if fnmatch.fnmatch(permission, perm_pattern):
+                return True
+        return False
 
     # ------------------------------------------------------------------
     # Handlers

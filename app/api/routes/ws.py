@@ -4,9 +4,11 @@ from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from app.ws.admin import AdminManager
 from app.ws.ai_stream import AIStreamManager
+from app.ws.auth import WSAuthenticator
 from app.ws.commands import CommandExecutionManager
 from app.ws.file_transfer import FileTransferManager
 from app.ws.manager import WebSocketConnectionManager
+from app.ws.schemas import ServerMessage, WSMessageType
 
 router = APIRouter(tags=["WebSocket"])
 
@@ -24,6 +26,9 @@ async def websocket_endpoint(
         await websocket.close(code=1011, reason="WebSocket manager not available")
         return
 
+    authenticator: WSAuthenticator | None = getattr(
+        websocket.app.state, "ws_authenticator", None,
+    )
     ai_stream: AIStreamManager | None = getattr(
         websocket.app.state, "ai_stream_manager", None,
     )
@@ -46,6 +51,21 @@ async def websocket_endpoint(
     try:
         while True:
             raw = await websocket.receive_text()
+
+            if authenticator:
+                if not await authenticator.check_rate_limit(cid):
+                    if await manager.is_connected(cid):
+                        await manager.send(
+                            cid,
+                            ServerMessage(
+                                type=WSMessageType.ERROR,
+                                payload={"error": "rate limit exceeded"},
+                            ),
+                        )
+                    continue
+                if await authenticator.try_handle_auth_message(cid, manager, raw):
+                    continue
+
             if ai_stream and await ai_stream.try_handle_message(cid, raw):
                 continue
             if cmd_exec and await cmd_exec.try_handle_message(cid, raw):
@@ -60,6 +80,8 @@ async def websocket_endpoint(
     except WebSocketDisconnect:
         pass
     finally:
+        if authenticator:
+            await authenticator.on_disconnect(cid)
         if ai_stream:
             await ai_stream.cleanup(cid)
         if cmd_exec:

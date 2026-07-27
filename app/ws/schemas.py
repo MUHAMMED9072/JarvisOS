@@ -88,6 +88,16 @@ class WSMessageType(str, Enum):
     FILE_PROGRESS = "file.progress"
     FILE_ERROR = "file.error"
 
+    # Client <-> Server: Authentication (P12-08)
+    AUTH_REQUEST = "auth.request"
+    AUTH_RESPONSE = "auth.response"
+    AUTH_SUCCESS = "auth.success"
+    AUTH_FAILURE = "auth.failure"
+    AUTH_REFRESH = "auth.refresh"
+    AUTH_LOGOUT = "auth.logout"
+    AUTH_EXPIRED = "auth.expired"
+    AUTH_DENIED = "auth.denied"
+
     # System Monitor
     SYSTEM_METRICS = "system.metrics"
     SYSTEM_HEALTH = "system.health"

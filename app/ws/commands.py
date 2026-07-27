@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import fnmatch
 import json
 import time
 import uuid
@@ -97,12 +98,42 @@ class CommandExecutionManager:
 
         return False
 
+    async def _check_permission(
+        self,
+        client_id: str,
+        permission: str,
+    ) -> bool:
+        info = self._ws.get_connection(client_id)
+        if info is None:
+            return False
+        metadata = info.metadata or {}
+        if not isinstance(metadata, dict):
+            return True
+        session_id = metadata.get("session_id")
+        if not session_id:
+            return True
+        roles = metadata.get("roles", [])
+        if "admin" in roles:
+            return True
+        perms = metadata.get("permissions", set())
+        if isinstance(perms, list):
+            perms = set(perms)
+        if permission in perms:
+            return True
+        for perm_pattern in perms:
+            if fnmatch.fnmatch(permission, perm_pattern):
+                return True
+        return False
+
     async def _handle_execute(
         self,
         client_id: str,
         payload: dict[str, Any],
     ) -> None:
         """Process an incoming ``command.execute`` message."""
+        if not await self._check_permission(client_id, "command.execute"):
+            return
+
         command_type: str = payload.get("type", "command")
         command_id: str = payload.get("command_id") or f"cmd-{uuid.uuid4().hex[:12]}"
         correlation_id: str = payload.get("correlation_id") or uuid.uuid4().hex

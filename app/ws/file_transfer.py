@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import fnmatch
 import hashlib
 import json
 import os
@@ -123,11 +124,41 @@ class FileTransferManager:
     # Upload handlers
     # ------------------------------------------------------------------
 
+    async def _check_permission(
+        self,
+        client_id: str,
+        permission: str,
+    ) -> bool:
+        info = self._ws.get_connection(client_id)
+        if info is None:
+            return False
+        metadata = info.metadata or {}
+        if not isinstance(metadata, dict):
+            return True
+        session_id = metadata.get("session_id")
+        if not session_id:
+            return True
+        roles = metadata.get("roles", [])
+        if "admin" in roles:
+            return True
+        perms = metadata.get("permissions", set())
+        if isinstance(perms, list):
+            perms = set(perms)
+        if permission in perms:
+            return True
+        for perm_pattern in perms:
+            if fnmatch.fnmatch(permission, perm_pattern):
+                return True
+        return False
+
     async def _handle_upload_start(
         self,
         client_id: str,
         payload: dict[str, Any],
     ) -> None:
+        if not await self._check_permission(client_id, "filesystem.upload"):
+            return
+
         filename: str = payload.get("filename", "")
         file_size: int = payload.get("file_size", 0)
         expected_sha256: str = payload.get("sha256", "")

@@ -1,5 +1,6 @@
 from app.ws.admin import AdminManager
 from app.ws.ai_stream import AIStreamManager
+from app.ws.auth import WSAuthenticator
 from app.ws.bridge import EventStreamBridge
 from app.ws.commands import CommandExecutionManager
 from app.ws.file_transfer import FileTransferManager
@@ -11,6 +12,7 @@ from app.ws.events import (
     match_event,
 )
 from app.ws.manager import WebSocketConnectionManager, ConnectionInfo
+from app.ws.rate_limiter import RateLimiter
 from app.ws.schemas import (
     ClientMessage,
     ServerMessage,
@@ -23,10 +25,12 @@ from app.ws.schemas import (
     WSLeftMessage,
     WSMessage,
 )
+from app.ws.session import AuthSession, SessionStore
 
 __all__ = [
     "AdminManager",
     "AIStreamManager",
+    "AuthSession",
     "CommandExecutionManager",
     "ConnectionInfo",
     "FileTransferManager",
@@ -34,8 +38,11 @@ __all__ = [
     "EventEnvelope",
     "EventReplayBuffer",
     "EventStreamBridge",
+    "RateLimiter",
     "ServerMessage",
+    "SessionStore",
     "WSMessageType",
+    "WSAuthenticator",
     "WSErrorMessage",
     "WSPongMessage",
     "WSSubscribedMessage",

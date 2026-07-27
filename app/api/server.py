@@ -18,10 +18,12 @@ from app.core.registry import ServiceRegistry
 from app.monitor.service import SystemMonitorService
 from app.ws.admin import AdminManager
 from app.ws.ai_stream import AIStreamManager
+from app.ws.auth import WSAuthenticator
 from app.ws.bridge import EventStreamBridge
 from app.ws.commands import CommandExecutionManager
 from app.ws.file_transfer import FileTransferManager
 from app.ws.manager import WebSocketConnectionManager
+from app.ws.session import SessionStore
 
 
 @asynccontextmanager
@@ -70,8 +72,8 @@ def create_app(
     )
 
     app.state.registry = registry
-    app.state.ws_manager = WebSocketConnectionManager()
 
+    _init_ws_authenticator(app)
     _init_event_stream_bridge(app)
     _init_ai_stream_manager(app)
     _init_command_execution_manager(app)
@@ -84,6 +86,25 @@ def create_app(
     _register_error_handlers(app)
 
     return app
+
+
+def _init_ws_authenticator(app: FastAPI) -> None:
+    from app.core.config import Config
+
+    registry: ServiceRegistry | None = getattr(app.state, "registry", None)
+    event_bus = registry.get_optional("event_bus") if registry else None
+    session_store = SessionStore(session_expiry=Config.WS_SESSION_EXPIRY)
+
+    authenticator = WSAuthenticator(
+        session_store=session_store,
+        event_bus=event_bus,
+        config=Config,
+    )
+    app.state.ws_authenticator = authenticator
+
+    app.state.ws_manager = WebSocketConnectionManager(
+        authenticator=authenticator,
+    )
 
 
 def _init_event_stream_bridge(app: FastAPI) -> None:
