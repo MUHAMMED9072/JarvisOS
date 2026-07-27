@@ -18,6 +18,7 @@ from app.core.registry import ServiceRegistry
 from app.monitor.service import SystemMonitorService
 from app.ws.ai_stream import AIStreamManager
 from app.ws.bridge import EventStreamBridge
+from app.ws.commands import CommandExecutionManager
 from app.ws.manager import WebSocketConnectionManager
 
 
@@ -71,6 +72,7 @@ def create_app(
 
     _init_event_stream_bridge(app)
     _init_ai_stream_manager(app)
+    _init_command_execution_manager(app)
     _init_system_monitor(app)
 
     register_routes(app)
@@ -94,6 +96,18 @@ def _init_event_stream_bridge(app: FastAPI) -> None:
     )
     bridge.start()
     app.state.ws_bridge = bridge
+
+
+def _init_command_execution_manager(app: FastAPI) -> None:
+    """Create the remote command execution manager."""
+    registry: ServiceRegistry | None = getattr(app.state, "registry", None)
+    if registry is None:
+        return
+    mgr = CommandExecutionManager(
+        ws_manager=app.state.ws_manager,
+        registry=registry,
+    )
+    app.state.command_execution_manager = mgr
 
 
 def _init_ai_stream_manager(app: FastAPI) -> None:

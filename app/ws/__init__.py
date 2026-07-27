@@ -1,5 +1,6 @@
 from app.ws.ai_stream import AIStreamManager
 from app.ws.bridge import EventStreamBridge
+from app.ws.commands import CommandExecutionManager
 from app.ws.events import (
     EventEnvelope,
     EventReplayBuffer,
@@ -23,6 +24,7 @@ from app.ws.schemas import (
 
 __all__ = [
     "AIStreamManager",
+    "CommandExecutionManager",
     "ConnectionInfo",
     "ClientMessage",
     "EventEnvelope",

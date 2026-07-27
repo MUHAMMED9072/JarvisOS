@@ -33,6 +33,15 @@ class WSMessageType(str, Enum):
     AI_STREAM_ERROR = "ai.stream.error"
     AI_STREAM_STARTED = "ai.stream.started"
 
+    # Client -> Server: Remote Command Execution (P12-05)
+    COMMAND_EXECUTE = "command.execute"
+    COMMAND_CANCEL = "command.cancel"
+
+    # Server -> Client: Remote Command Execution (P12-05)
+    COMMAND_RESULT = "command.result"
+    COMMAND_ERROR = "command.error"
+    COMMAND_PROGRESS = "command.progress"
+
     # System Monitor
     SYSTEM_METRICS = "system.metrics"
     SYSTEM_HEALTH = "system.health"
