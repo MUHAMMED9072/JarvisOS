@@ -1,6 +1,7 @@
 from app.ws.ai_stream import AIStreamManager
 from app.ws.bridge import EventStreamBridge
 from app.ws.commands import CommandExecutionManager
+from app.ws.file_transfer import FileTransferManager
 from app.ws.events import (
     EventEnvelope,
     EventReplayBuffer,
@@ -26,6 +27,7 @@ __all__ = [
     "AIStreamManager",
     "CommandExecutionManager",
     "ConnectionInfo",
+    "FileTransferManager",
     "ClientMessage",
     "EventEnvelope",
     "EventReplayBuffer",

@@ -19,6 +19,7 @@ from app.monitor.service import SystemMonitorService
 from app.ws.ai_stream import AIStreamManager
 from app.ws.bridge import EventStreamBridge
 from app.ws.commands import CommandExecutionManager
+from app.ws.file_transfer import FileTransferManager
 from app.ws.manager import WebSocketConnectionManager
 
 
@@ -73,6 +74,7 @@ def create_app(
     _init_event_stream_bridge(app)
     _init_ai_stream_manager(app)
     _init_command_execution_manager(app)
+    _init_file_transfer_manager(app)
     _init_system_monitor(app)
 
     register_routes(app)
@@ -108,6 +110,20 @@ def _init_command_execution_manager(app: FastAPI) -> None:
         registry=registry,
     )
     app.state.command_execution_manager = mgr
+
+
+def _init_file_transfer_manager(app: FastAPI) -> None:
+    """Create the remote file transfer manager."""
+    from app.core.config import Config
+
+    mgr = FileTransferManager(
+        ws_manager=app.state.ws_manager,
+        upload_dir=str(Config.FILE_DIR),
+        download_dir=str(Config.FILE_DIR),
+        max_file_size=Config.MAX_FILE_SIZE,
+        chunk_size=Config.CHUNK_SIZE,
+    )
+    app.state.file_transfer_manager = mgr
 
 
 def _init_ai_stream_manager(app: FastAPI) -> None:

@@ -42,6 +42,23 @@ class WSMessageType(str, Enum):
     COMMAND_ERROR = "command.error"
     COMMAND_PROGRESS = "command.progress"
 
+    # Client -> Server: Remote File Transfer (P12-06)
+    FILE_UPLOAD_START = "file.upload.start"
+    FILE_UPLOAD_CHUNK = "file.upload.chunk"
+    FILE_UPLOAD_COMPLETE = "file.upload.complete"
+    FILE_UPLOAD_CANCEL = "file.upload.cancel"
+    FILE_DOWNLOAD_START = "file.download.start"
+    FILE_DOWNLOAD_CANCEL = "file.download.cancel"
+
+    # Server -> Client: Remote File Transfer (P12-06)
+    FILE_UPLOAD_STARTED = "file.upload.started"
+    FILE_UPLOAD_DONE = "file.upload.done"
+    FILE_DOWNLOAD_INIT = "file.download.init"
+    FILE_DOWNLOAD_CHUNK = "file.download.chunk"
+    FILE_DOWNLOAD_DONE = "file.download.done"
+    FILE_PROGRESS = "file.progress"
+    FILE_ERROR = "file.error"
+
     # System Monitor
     SYSTEM_METRICS = "system.metrics"
     SYSTEM_HEALTH = "system.health"
