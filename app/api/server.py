@@ -15,6 +15,7 @@ from app.api.errors import (
 from app.api.middleware import register_middleware
 from app.api.routes import register_routes
 from app.core.registry import ServiceRegistry
+from app.monitor.service import SystemMonitorService
 from app.ws.ai_stream import AIStreamManager
 from app.ws.bridge import EventStreamBridge
 from app.ws.manager import WebSocketConnectionManager
@@ -22,8 +23,13 @@ from app.ws.manager import WebSocketConnectionManager
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Application lifespan: shutdown only (startup done in create_app)."""
+    """Application lifespan: start monitor, yield, then clean up."""
+    monitor: SystemMonitorService | None = getattr(app.state, "system_monitor", None)
+    if monitor is not None:
+        monitor.start()
     yield
+    if monitor is not None:
+        await monitor.stop()
     bridge: EventStreamBridge | None = getattr(app.state, "ws_bridge", None)
     if bridge is not None:
         bridge.stop()
@@ -65,6 +71,7 @@ def create_app(
 
     _init_event_stream_bridge(app)
     _init_ai_stream_manager(app)
+    _init_system_monitor(app)
 
     register_routes(app)
     register_middleware(app)
@@ -102,6 +109,22 @@ def _init_ai_stream_manager(app: FastAPI) -> None:
         ws_manager=app.state.ws_manager,
     )
     app.state.ai_stream_manager = mgr
+
+
+def _init_system_monitor(app: FastAPI) -> None:
+    """Create and start the system monitor if the event bus is available."""
+    registry: ServiceRegistry | None = getattr(app.state, "registry", None)
+    if registry is None:
+        return
+    event_bus = registry.get_optional("event_bus")
+    if event_bus is None:
+        return
+    monitor = SystemMonitorService(
+        registry=registry,
+        event_bus=event_bus,
+        interval=5.0,
+    )
+    app.state.system_monitor = monitor
 
 
 def _register_error_handlers(app: FastAPI) -> None:

@@ -33,6 +33,11 @@ class WSMessageType(str, Enum):
     AI_STREAM_ERROR = "ai.stream.error"
     AI_STREAM_STARTED = "ai.stream.started"
 
+    # System Monitor
+    SYSTEM_METRICS = "system.metrics"
+    SYSTEM_HEALTH = "system.health"
+    SYSTEM_WARNING = "system.warning"
+
 
 class ClientMessage(BaseModel):
     """Message sent from a WebSocket client to the server."""
