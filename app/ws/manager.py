@@ -12,6 +12,7 @@ from fastapi import WebSocket
 
 from app.core.logger import JarvisLogger
 from app.ws.auth import WSAuthenticator
+from app.ws.events import EventEnvelope, get_matching_subscriptions
 from app.ws.schemas import (
     ClientMessage,
     ServerMessage,
@@ -22,13 +23,12 @@ from app.ws.schemas import (
 class ConnectionInfo:
     """Metadata about a single WebSocket connection."""
 
-    __slots__ = ("client_id", "websocket", "metadata", "rooms", "subscriptions", "connected_at", "last_heartbeat")
-
     def __init__(
         self,
         client_id: str,
         websocket: WebSocket,
         metadata: dict[str, Any] | None = None,
+        queue_maxsize: int = 100,
     ) -> None:
         self.client_id: str = client_id
         self.websocket: WebSocket = websocket
@@ -37,6 +37,10 @@ class ConnectionInfo:
         self.subscriptions: set[str] = set()
         self.connected_at: float = time.monotonic()
         self.last_heartbeat: float = time.monotonic()
+        self.event_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(
+            maxsize=queue_maxsize
+        )
+        self.dispatch_task: asyncio.Task[None] | None = None
 
 
 class WebSocketConnectionManager:
@@ -112,6 +116,13 @@ class WebSocketConnectionManager:
         async with self._lock:
             info = self._connections.pop(client_id, None)
             if info:
+                if info.dispatch_task is not None and not info.dispatch_task.done():
+                    info.dispatch_task.cancel()
+                    try:
+                        await info.dispatch_task
+                    except asyncio.CancelledError:
+                        pass
+                    info.dispatch_task = None
                 for room in list(info.rooms):
                     if room in self._rooms:
                         self._rooms[room].discard(client_id)
@@ -203,6 +214,85 @@ class WebSocketConnectionManager:
                 if event in info.subscriptions
             ]
 
+    async def get_subscribed_clients_for_event(self, event_name: str) -> list[str]:
+        """Return all client IDs whose subscription patterns match *event_name*.
+
+        Supports wildcard (fnmatch) patterns in client subscriptions.
+        """
+        async with self._lock:
+            return [
+                cid
+                for cid, info in self._connections.items()
+                if get_matching_subscriptions(info.subscriptions, event_name)
+            ]
+
+    # ------------------------------------------------------------------
+    # Event streaming (per-client queue + dispatch)
+    # ------------------------------------------------------------------
+
+    async def enqueue_event(
+        self,
+        client_id: str,
+        envelope: EventEnvelope,
+    ) -> bool:
+        """Push an event envelope onto a client's event queue.
+
+        If the queue is full, the oldest event is dropped (backpressure).
+        Returns ``True`` if the enqueue succeeded, ``False`` if the
+        client was not found.
+        """
+        async with self._lock:
+            info = self._connections.get(client_id)
+            if info is None:
+                return False
+            try:
+                info.event_queue.put_nowait(envelope.model_dump())
+            except asyncio.QueueFull:
+                try:
+                    info.event_queue.get_nowait()
+                    info.event_queue.put_nowait(envelope.model_dump())
+                except asyncio.QueueEmpty:
+                    pass
+            if info.dispatch_task is None or info.dispatch_task.done():
+                info.dispatch_task = asyncio.create_task(
+                    self._dispatch_loop(client_id, info)
+                )
+        return True
+
+    async def _dispatch_loop(
+        self,
+        client_id: str,
+        info: ConnectionInfo,
+    ) -> None:
+        """Background task: drain the client's event queue and send via WS."""
+        while True:
+            try:
+                payload = await info.event_queue.get()
+                try:
+                    await info.websocket.send_json(payload)
+                except Exception:
+                    JarvisLogger.warning(
+                        "Dispatch send failed for %s; removing", client_id
+                    )
+                    await self.disconnect(client_id)
+                    return
+            except asyncio.CancelledError:
+                return
+
+    async def stop_dispatch(self, client_id: str) -> None:
+        """Cancel a client's dispatch task."""
+        async with self._lock:
+            info = self._connections.get(client_id)
+            if info is None:
+                return
+            if info.dispatch_task is not None and not info.dispatch_task.done():
+                info.dispatch_task.cancel()
+                try:
+                    await info.dispatch_task
+                except asyncio.CancelledError:
+                    pass
+                info.dispatch_task = None
+
     # ------------------------------------------------------------------
     # Messaging
     # ------------------------------------------------------------------
@@ -245,11 +335,11 @@ class WebSocketConnectionManager:
         return count
 
     async def send_to_subscribers(self, event: str, message: ServerMessage) -> int:
-        """Send a message to all clients subscribed to an event.
+        """Send a message to all clients subscribed to an event (supports wildcards).
 
         Returns the number of successful sends.
         """
-        subscribers = await self.get_subscribed_clients(event)
+        subscribers = await self.get_subscribed_clients_for_event(event)
         count = 0
         for cid in subscribers:
             if await self.send(cid, message):
@@ -377,6 +467,9 @@ class WebSocketConnectionManager:
             self._heartbeat_task = None
 
         async with self._lock:
+            for info in self._connections.values():
+                if info.dispatch_task is not None and not info.dispatch_task.done():
+                    info.dispatch_task.cancel()
             cids = list(self._connections.keys())
         for cid in cids:
             await self.disconnect(cid)

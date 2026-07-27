@@ -14,6 +14,8 @@ from app.api.errors import (
 )
 from app.api.middleware import register_middleware
 from app.api.routes import register_routes
+from app.core.registry import ServiceRegistry
+from app.ws.bridge import EventStreamBridge
 from app.ws.manager import WebSocketConnectionManager
 
 
@@ -21,6 +23,9 @@ from app.ws.manager import WebSocketConnectionManager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan: shutdown only (startup done in create_app)."""
     yield
+    bridge: EventStreamBridge | None = getattr(app.state, "ws_bridge", None)
+    if bridge is not None:
+        bridge.stop()
     ws_mgr: WebSocketConnectionManager | None = getattr(app.state, "ws_manager", None)
     if ws_mgr is not None:
         await ws_mgr.shutdown()
@@ -57,11 +62,29 @@ def create_app(
     app.state.registry = registry
     app.state.ws_manager = WebSocketConnectionManager()
 
+    _init_event_stream_bridge(app)
+
     register_routes(app)
     register_middleware(app)
     _register_error_handlers(app)
 
     return app
+
+
+def _init_event_stream_bridge(app: FastAPI) -> None:
+    """Create and start the EventBus → WebSocket bridge if possible."""
+    registry: ServiceRegistry | None = getattr(app.state, "registry", None)
+    if registry is None:
+        return
+    event_bus = registry.get_optional("event_bus")
+    if event_bus is None:
+        return
+    bridge = EventStreamBridge(
+        event_bus=event_bus,
+        ws_manager=app.state.ws_manager,
+    )
+    bridge.start()
+    app.state.ws_bridge = bridge
 
 
 def _register_error_handlers(app: FastAPI) -> None:
