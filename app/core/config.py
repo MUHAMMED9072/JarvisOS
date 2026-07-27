@@ -156,6 +156,18 @@ class Config:
     CLIENT_LOG_LEVEL = "INFO"
 
     # ======================================================
+    # DESKTOP CLIENT UI (P13-02)
+    # ======================================================
+
+    CLIENT_THEME = "system"
+    CLIENT_WINDOW_WIDTH = 1200
+    CLIENT_WINDOW_HEIGHT = 800
+    CLIENT_REMEMBER_WINDOW = True
+    CLIENT_DEFAULT_VIEW = "dashboard"
+    CLIENT_ANIMATIONS = True
+    CLIENT_SIDEBAR_WIDTH = 220
+
+    # ======================================================
     # APPLICATIONS
     # ======================================================
 
