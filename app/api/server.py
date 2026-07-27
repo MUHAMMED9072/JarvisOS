@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
@@ -13,6 +14,16 @@ from app.api.errors import (
 )
 from app.api.middleware import register_middleware
 from app.api.routes import register_routes
+from app.ws.manager import WebSocketConnectionManager
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Application lifespan: shutdown only (startup done in create_app)."""
+    yield
+    ws_mgr: WebSocketConnectionManager | None = getattr(app.state, "ws_manager", None)
+    if ws_mgr is not None:
+        await ws_mgr.shutdown()
 
 
 def create_app(
@@ -40,9 +51,11 @@ def create_app(
         docs_url="/api/v1/docs",
         redoc_url="/api/v1/redoc",
         openapi_url="/api/v1/openapi.json",
+        lifespan=_lifespan,
     )
 
     app.state.registry = registry
+    app.state.ws_manager = WebSocketConnectionManager()
 
     register_routes(app)
     register_middleware(app)

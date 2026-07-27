@@ -13,6 +13,7 @@ def register_routes(app: FastAPI) -> None:
     from app.api.routes.voice import router as voice_router
     from app.api.routes.evolution import router as evolution_router
     from app.api.routes.memory import router as memory_router
+    from app.api.routes.ws import router as ws_router
 
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(status_router, prefix="/api/v1")
@@ -24,3 +25,4 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(voice_router)
     app.include_router(memory_router)
     app.include_router(evolution_router)
+    app.include_router(ws_router)
