@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
+from app.ws.ai_stream import AIStreamManager
 from app.ws.manager import WebSocketConnectionManager
 
 router = APIRouter(tags=["WebSocket"])
@@ -20,6 +21,10 @@ async def websocket_endpoint(
         await websocket.close(code=1011, reason="WebSocket manager not available")
         return
 
+    ai_stream: AIStreamManager | None = getattr(
+        websocket.app.state, "ai_stream_manager", None,
+    )
+
     info = await manager.connect(websocket, client_id=client_id, token=token)
     if info is None:
         return
@@ -29,10 +34,14 @@ async def websocket_endpoint(
     try:
         while True:
             raw = await websocket.receive_text()
+            if ai_stream and await ai_stream.try_handle_message(cid, raw):
+                continue
             response = await manager.handle_message(cid, raw)
             if response is not None:
                 await manager.send(cid, response)
     except WebSocketDisconnect:
         pass
     finally:
+        if ai_stream:
+            await ai_stream.cleanup(cid)
         await manager.disconnect(cid)

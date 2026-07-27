@@ -16,6 +16,8 @@ class WSMessageType(str, Enum):
     JOIN = "join"
     LEAVE = "leave"
     MESSAGE = "message"
+    AI_STREAM_START = "ai.stream.start"
+    AI_STREAM_CANCEL = "ai.stream.cancel"
 
     # Server -> Client
     PONG = "pong"
@@ -25,6 +27,11 @@ class WSMessageType(str, Enum):
     LEFT = "left"
     EVENT = "event"
     ERROR = "error"
+    AI_STREAM_CHUNK = "ai.stream.chunk"
+    AI_STREAM_COMPLETE = "ai.stream.complete"
+    AI_STREAM_CANCELLED = "ai.stream.cancelled"
+    AI_STREAM_ERROR = "ai.stream.error"
+    AI_STREAM_STARTED = "ai.stream.started"
 
 
 class ClientMessage(BaseModel):

@@ -1,10 +1,11 @@
+from app.ws.ai_stream import AIStreamManager
 from app.ws.bridge import EventStreamBridge
 from app.ws.events import (
     EventEnvelope,
     EventReplayBuffer,
+    get_matching_subscriptions,
     make_envelope,
     match_event,
-    get_matching_subscriptions,
 )
 from app.ws.manager import WebSocketConnectionManager, ConnectionInfo
 from app.ws.schemas import (
@@ -21,6 +22,7 @@ from app.ws.schemas import (
 )
 
 __all__ = [
+    "AIStreamManager",
     "ConnectionInfo",
     "ClientMessage",
     "EventEnvelope",

@@ -1,13 +1,13 @@
 {
-  "success": false,
-  "returncode": 1,
+  "success": true,
+  "returncode": 0,
   "stdout": "",
-  "stderr": "Execution timed out after 0.15 seconds.\n",
-  "execution_time": 0.33518440020270646,
-  "cpu_time": 0.0,
-  "peak_ram_bytes": 0,
-  "timed_out": true,
-  "workspace": "C:\\Users\\nsmuh\\AppData\\Local\\Temp\\jarvis-sandbox-_05n3zk9",
+  "stderr": "",
+  "execution_time": 0.1781116999918595,
+  "cpu_time": 0.078125,
+  "peak_ram_bytes": 11980800,
+  "timed_out": false,
+  "workspace": "C:\\Users\\nsmuh\\AppData\\Local\\Temp\\jarvis-sandbox-s2l4jl28",
   "security_violations": [],
-  "reported_at": "2026-07-13T04:14:28Z"
+  "reported_at": "2026-07-27T01:59:24Z"
 }

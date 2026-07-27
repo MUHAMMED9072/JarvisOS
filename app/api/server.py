@@ -15,6 +15,7 @@ from app.api.errors import (
 from app.api.middleware import register_middleware
 from app.api.routes import register_routes
 from app.core.registry import ServiceRegistry
+from app.ws.ai_stream import AIStreamManager
 from app.ws.bridge import EventStreamBridge
 from app.ws.manager import WebSocketConnectionManager
 
@@ -63,6 +64,7 @@ def create_app(
     app.state.ws_manager = WebSocketConnectionManager()
 
     _init_event_stream_bridge(app)
+    _init_ai_stream_manager(app)
 
     register_routes(app)
     register_middleware(app)
@@ -85,6 +87,21 @@ def _init_event_stream_bridge(app: FastAPI) -> None:
     )
     bridge.start()
     app.state.ws_bridge = bridge
+
+
+def _init_ai_stream_manager(app: FastAPI) -> None:
+    """Create the AI stream manager if ``ai_manager`` is available."""
+    registry: ServiceRegistry | None = getattr(app.state, "registry", None)
+    if registry is None:
+        return
+    ai_manager = registry.get_optional("ai_manager")
+    if ai_manager is None:
+        return
+    mgr = AIStreamManager(
+        ai_manager=ai_manager,
+        ws_manager=app.state.ws_manager,
+    )
+    app.state.ai_stream_manager = mgr
 
 
 def _register_error_handlers(app: FastAPI) -> None:
