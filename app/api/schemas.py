@@ -396,3 +396,69 @@ class VoiceProviderInfo(BaseModel):
 
 class VoiceProviderListResponse(BaseModel):
     providers: list[VoiceProviderInfo]
+
+
+# ==========================================================================
+# Memory (P11-06)
+# ==========================================================================
+
+
+class MemoryItemResponse(BaseModel):
+    role: str = Field(..., description="Message role")
+    content: str = Field(..., description="Memory content")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Memory metadata")
+    timestamp: str = Field("", description="ISO-8601 timestamp")
+
+
+class MemoryListResponse(BaseModel):
+    items: list[MemoryItemResponse]
+    count: int = Field(0, description="Number of items")
+
+
+class MemorySearchResponse(BaseModel):
+    query: str = Field(..., description="Search query")
+    items: list[MemoryItemResponse]
+    count: int = Field(0, description="Number of matching items")
+
+
+class MemoryRecentResponse(BaseModel):
+    items: list[MemoryItemResponse]
+    count: int = Field(0, description="Number of items")
+
+
+class MemoryRememberRequest(BaseModel):
+    role: str = Field(..., description="Message role (user/assistant/system)")
+    content: str = Field(..., min_length=1, description="Memory content")
+    metadata: dict[str, Any] | None = Field(None, description="Optional metadata")
+
+
+class MemoryRememberResponse(BaseModel):
+    status: str = Field(..., description="Action status")
+    message: str = Field(..., description="Status message")
+
+
+class MemoryActionResponse(BaseModel):
+    status: str = Field(..., description="Action status")
+    message: str = Field(..., description="Status message")
+
+
+class MemorySessionInfo(BaseModel):
+    id: str = Field("current", description="Session identifier")
+    message_count: int = Field(0, description="Number of messages in session")
+    last_intent: str | None = Field(None, description="Last detected intent")
+    last_application: str | None = Field(None, description="Last application context")
+    last_skill: str | None = Field(None, description="Last skill used")
+
+
+class MemorySessionListResponse(BaseModel):
+    sessions: list[MemorySessionInfo]
+
+
+class MemorySessionDetailResponse(BaseModel):
+    id: str = Field("current", description="Session identifier")
+    messages: list[MemoryItemResponse]
+    last_intent: str | None = Field(None, description="Last detected intent")
+    last_entities: dict[str, Any] = Field(default_factory=dict, description="Last entities")
+    last_application: str | None = Field(None, description="Last application context")
+    last_skill: str | None = Field(None, description="Last skill used")
+    message_count: int = Field(0, description="Number of messages in session")
