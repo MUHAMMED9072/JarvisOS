@@ -25,6 +25,8 @@ from .integrations.plugin_registry import PluginRegistry, PluginRecord
 from .integrations.api_registry import ApiRegistry, ApiRecord
 from .integrations.model_registry import ModelRegistry, ModelRecord
 from .capability_registry import CapabilityRegistry, ProviderInfo, GapAnalysis
+from .migration import MigrationRunner, DataMigration
+from .validation import DataValidator, ValidationResult
 
 __all__ = [
     "ENTITY_TYPES",
@@ -73,4 +75,8 @@ __all__ = [
     "CapabilityRegistry",
     "ProviderInfo",
     "GapAnalysis",
+    "MigrationRunner",
+    "DataMigration",
+    "DataValidator",
+    "ValidationResult",
 ]
