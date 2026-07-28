@@ -11,6 +11,8 @@ from app.intelligence.outcome_analyzer import OutcomeAnalyzer, TaskOutcome, Patt
 from app.intelligence.reflection import Reflection, ReflectionReport
 from app.intelligence.decision_matrix import DecisionMatrix, Candidate, CriterionDef, DecisionResult
 from app.intelligence.decision_engine import DecisionEngine, AgentInfo, DecisionRecord
+from app.intelligence.context import SessionContext, StageMetrics
+from app.intelligence.pipeline import IntelligencePipeline
 
 __all__ = [
     "Goal", "GoalInterpreter", "GoalStatus", "GoalType",
@@ -26,4 +28,6 @@ __all__ = [
     "Reflection", "ReflectionReport",
     "DecisionMatrix", "Candidate", "CriterionDef", "DecisionResult",
     "DecisionEngine", "AgentInfo", "DecisionRecord",
+    "SessionContext", "StageMetrics",
+    "IntelligencePipeline",
 ]
