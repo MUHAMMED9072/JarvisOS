@@ -14,6 +14,7 @@ from app.executive_controller.incident import (
     IncidentStatus,
     IncidentStore,
 )
+from app.executive_controller.load_balancer import AgentLoad, LoadBalancer
 from app.executive_controller.loop_detector import (
     ExecutionRecord,
     LoopDetector,
@@ -22,8 +23,17 @@ from app.executive_controller.loop_detector import (
 )
 from app.executive_controller.priority_manager import PriorityLevel, PriorityManager
 from app.executive_controller.resource_manager import ResourceManager, ResourceQuota, ResourceUsage
+from app.executive_controller.routing_strategies import (
+    AffinityStrategy,
+    LeastLoadedStrategy,
+    RoundRobinStrategy,
+    RoutingStrategy,
+    WeightedStrategy,
+)
 
 __all__ = [
+    "AffinityStrategy",
+    "AgentLoad",
     "ComponentStatus",
     "ExecutiveController",
     "ExecutionRecord",
@@ -33,6 +43,8 @@ __all__ = [
     "IncidentSeverity",
     "IncidentStatus",
     "IncidentStore",
+    "LeastLoadedStrategy",
+    "LoadBalancer",
     "LoopDetector",
     "LoopReport",
     "LoopSeverity",
@@ -43,6 +55,9 @@ __all__ = [
     "ResourceManager",
     "ResourceQuota",
     "ResourceUsage",
+    "RoundRobinStrategy",
+    "RoutingStrategy",
     "SubsystemInfo",
     "SubsystemStatus",
+    "WeightedStrategy",
 ]
