@@ -6,6 +6,9 @@ from app.intelligence.planner import Planner
 from app.intelligence.strategy_comparator import StrategyComparator, Strategy, Criterion, ComparisonResult
 from app.intelligence.justification import JustificationGenerator, Justification, Evidence, CounterArgument
 from app.intelligence.reasoner import Reasoner
+from app.intelligence.heuristic_store import HeuristicStore, Heuristic
+from app.intelligence.outcome_analyzer import OutcomeAnalyzer, TaskOutcome, PatternRecord
+from app.intelligence.reflection import Reflection, ReflectionReport
 
 __all__ = [
     "Goal", "GoalInterpreter", "GoalStatus", "GoalType",
@@ -16,4 +19,7 @@ __all__ = [
     "StrategyComparator", "Strategy", "Criterion", "ComparisonResult",
     "JustificationGenerator", "Justification", "Evidence", "CounterArgument",
     "Reasoner",
+    "HeuristicStore", "Heuristic",
+    "OutcomeAnalyzer", "TaskOutcome", "PatternRecord",
+    "Reflection", "ReflectionReport",
 ]
