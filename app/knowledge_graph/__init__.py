@@ -1,3 +1,4 @@
+from . import entity_types  # noqa: F401 — registers all entity types
 from .entity import Entity
 from .index import EntityIndex, RelationshipIndex
 from .relationship import Relationship
