@@ -19,6 +19,11 @@ from .optimizer import QueryOptimizer
 from .cascade import CircularDependencyError, would_create_cycle, validate_and_create
 from .batch import BatchResult, batch_create_relationships, batch_delete_relationships
 from .integrations.agent_registry import AgentRegistry, AgentRecord
+from .integrations.tool_registry import ToolRegistry, ToolRecord
+from .integrations.skill_registry import SkillRegistry, SkillRecord
+from .integrations.plugin_registry import PluginRegistry, PluginRecord
+from .integrations.api_registry import ApiRegistry, ApiRecord
+from .integrations.model_registry import ModelRegistry, ModelRecord
 
 __all__ = [
     "ENTITY_TYPES",
@@ -54,4 +59,14 @@ __all__ = [
     "QueryOptimizer",
     "AgentRegistry",
     "AgentRecord",
+    "ToolRegistry",
+    "ToolRecord",
+    "SkillRegistry",
+    "SkillRecord",
+    "PluginRegistry",
+    "PluginRecord",
+    "ApiRegistry",
+    "ApiRecord",
+    "ModelRegistry",
+    "ModelRecord",
 ]
