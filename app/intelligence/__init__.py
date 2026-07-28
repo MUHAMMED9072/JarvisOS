@@ -9,6 +9,8 @@ from app.intelligence.reasoner import Reasoner
 from app.intelligence.heuristic_store import HeuristicStore, Heuristic
 from app.intelligence.outcome_analyzer import OutcomeAnalyzer, TaskOutcome, PatternRecord
 from app.intelligence.reflection import Reflection, ReflectionReport
+from app.intelligence.decision_matrix import DecisionMatrix, Candidate, CriterionDef, DecisionResult
+from app.intelligence.decision_engine import DecisionEngine, AgentInfo, DecisionRecord
 
 __all__ = [
     "Goal", "GoalInterpreter", "GoalStatus", "GoalType",
@@ -22,4 +24,6 @@ __all__ = [
     "HeuristicStore", "Heuristic",
     "OutcomeAnalyzer", "TaskOutcome", "PatternRecord",
     "Reflection", "ReflectionReport",
+    "DecisionMatrix", "Candidate", "CriterionDef", "DecisionResult",
+    "DecisionEngine", "AgentInfo", "DecisionRecord",
 ]
