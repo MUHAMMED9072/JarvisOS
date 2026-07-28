@@ -5,6 +5,7 @@ from app.core.event_bus import EventBus
 from app.core.logger import JarvisLogger
 from app.core.registry import ServiceLifecycle, ServiceRegistry
 
+from app.kernel.config import ConfigRegistry, ConfigSchema
 from app.kernel.events import (
     AIEvents,
     AuthEvents,
@@ -65,6 +66,8 @@ __all__ = [
     "AuthEvents",
     "ComponentHealth",
     "Config",
+    "ConfigRegistry",
+    "ConfigSchema",
     "CronExpression",
     "EventBus",
     "GROUP_ADMIN",
