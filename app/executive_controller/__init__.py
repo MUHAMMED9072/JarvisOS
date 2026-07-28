@@ -8,6 +8,12 @@ from app.executive_controller.emergency_handler import (
     EmergencyMode,
     PreservedAgentState,
 )
+from app.executive_controller.evolution_coordinator import (
+    EvolutionCoordinator,
+    EvolutionPlan,
+    EvolutionStatus,
+    EvolutionWindow,
+)
 from app.executive_controller.failure_recovery import (
     ComponentStatus,
     FailureRecovery,
@@ -46,6 +52,10 @@ __all__ = [
     "EmergencyEvent",
     "EmergencyHandler",
     "EmergencyMode",
+    "EvolutionCoordinator",
+    "EvolutionPlan",
+    "EvolutionStatus",
+    "EvolutionWindow",
     "ExecutiveController",
     "ExecutionRecord",
     "FailureRecovery",
