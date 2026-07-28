@@ -1,6 +1,8 @@
 from app.agents.base import Agent, AgentMetadata, AgentStatus, AgentCapability
 from app.agents.types import SystemAgent, ToolAgent, DevelopmentAgent, DomainAgent, CompositeAgent
 from app.agents.factory import AgentFactory
+from app.agents.state_machine import AgentStateMachine, TransitionError, validate_transition, can_transition, allowed_transitions
+from app.agents.lifecycle import LifecycleManager, LifecycleEvent
 
 __all__ = [
     "Agent",
@@ -13,4 +15,11 @@ __all__ = [
     "DomainAgent",
     "CompositeAgent",
     "AgentFactory",
+    "AgentStateMachine",
+    "TransitionError",
+    "validate_transition",
+    "can_transition",
+    "allowed_transitions",
+    "LifecycleManager",
+    "LifecycleEvent",
 ]
