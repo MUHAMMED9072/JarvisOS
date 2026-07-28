@@ -128,6 +128,12 @@ class WSReliabilityEvents:
     LATENCY_UPDATE = "ws.latency.update"
 
 
+class AuditEvents:
+    """Audit trail event name constants for the EventBus."""
+
+    ENTRY = "audit.entry"
+
+
 class WSProductionEvents:
     """WebSocket production features & observability event name constants."""
 

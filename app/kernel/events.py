@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.core.events import (
     AIEvents,
+    AuditEvents,
     AuthEvents,
     KernelEvents,
     LifecycleEvents,
@@ -13,6 +14,7 @@ from app.core.events import (
 
 __all__ = [
     "AIEvents",
+    "AuditEvents",
     "AuthEvents",
     "KernelEvents",
     "LifecycleEvents",

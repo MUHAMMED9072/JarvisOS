@@ -39,6 +39,8 @@ GROUP_FILESYSTEM = FILESYSTEM
 GROUP_NETWORK = NETWORK
 GROUP_PLUGIN = "plugin"
 
+GROUP_AUDIT = "audit"
+
 ROOT_GROUPS: tuple[str, ...] = (
     GROUP_SYSTEM,
     GROUP_ADMIN,
@@ -51,6 +53,7 @@ ROOT_GROUPS: tuple[str, ...] = (
     GROUP_FILESYSTEM,
     GROUP_NETWORK,
     GROUP_PLUGIN,
+    GROUP_AUDIT,
 )
 
 HIERARCHY: dict[str, tuple[str, ...]] = {
@@ -129,6 +132,10 @@ HIERARCHY: dict[str, tuple[str, ...]] = {
         "plugin.enable",
         "plugin.disable",
         "plugin.configure",
+    ),
+    GROUP_AUDIT: (
+        "audit.read",
+        "audit.write",
     ),
 }
 

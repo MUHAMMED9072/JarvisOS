@@ -5,9 +5,19 @@ from app.core.event_bus import EventBus
 from app.core.logger import JarvisLogger
 from app.core.registry import ServiceLifecycle, ServiceRegistry
 
+from app.kernel.audit import AuditEvent, AuditLogger, AuditVerificationResult
 from app.kernel.config import ConfigRegistry, ConfigSchema
+from app.kernel.logger import (
+    LogEntry,
+    LogLevel,
+    StructuredLogger,
+    get_correlation_id,
+    reset_correlation_id,
+    set_correlation_id,
+)
 from app.kernel.events import (
     AIEvents,
+    AuditEvents,
     AuthEvents,
     KernelEvents,
     LifecycleEvents,
@@ -63,6 +73,10 @@ from app.kernel.task import Priority, Task, TaskStatus, TaskTrigger
 
 __all__ = [
     "AIEvents",
+    "AuditEvent",
+    "AuditEvents",
+    "AuditLogger",
+    "AuditVerificationResult",
     "AuthEvents",
     "ComponentHealth",
     "Config",
@@ -72,6 +86,7 @@ __all__ = [
     "EventBus",
     "GROUP_ADMIN",
     "GROUP_AI",
+    "GROUP_AUDIT",
     "GROUP_CONFIG",
     "GROUP_EVENTS",
     "GROUP_FILESYSTEM",
@@ -81,6 +96,7 @@ __all__ = [
     "GROUP_SERVICES",
     "GROUP_SKILLS",
     "GROUP_SYSTEM",
+    "get_correlation_id",
     "HealthEvent",
     "HealthMonitor",
     "HealthState",
@@ -93,6 +109,8 @@ __all__ = [
     "KernelPermission",
     "LifecycleEvents",
     "LivenessProbe",
+    "LogEntry",
+    "LogLevel",
     "PermissionGroup",
     "PermissionRegistry",
     "PluginConfigEvents",
@@ -102,6 +120,7 @@ __all__ = [
     "QuotaRegistry",
     "QuotaResult",
     "ReadinessProbe",
+    "reset_correlation_id",
     "ResourceQuota",
     "ResourceType",
     "ResourceUsage",
@@ -114,6 +133,8 @@ __all__ = [
     "SecurityServiceRegistry",
     "ServiceLifecycle",
     "ServiceRegistry",
+    "set_correlation_id",
+    "StructuredLogger",
     "SystemEvents",
     "SystemScheduler",
     "Task",
