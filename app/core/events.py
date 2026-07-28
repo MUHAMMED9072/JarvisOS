@@ -1,12 +1,44 @@
 """Central event name constants and event data helpers for the JARVIS OS EventBus.
 
-All AI-related event names are defined here as ``AIEvents`` class attributes
-so that publishers and subscribers use the same strings without duplication.
+All event-related constants are defined here so that publishers and
+subscribers use the same strings without duplication.
 """
 
 from __future__ import annotations
 
 from typing import Any
+
+
+class KernelEvents:
+    """Kernel lifecycle event name constants."""
+
+    BOOT_STARTED = "kernel.boot.started"
+    BOOT_COMPLETE = "kernel.boot.complete"
+    BOOT_FAILED = "kernel.boot.failed"
+    SHUTDOWN_STARTED = "kernel.shutdown.started"
+    SHUTDOWN_COMPLETE = "kernel.shutdown.complete"
+
+
+class SystemEvents:
+    """System-wide event name constants."""
+
+    HEALTH_CHECK = "system.health.check"
+    HEALTH_OK = "system.health.ok"
+    HEALTH_DEGRADED = "system.health.degraded"
+    HEALTH_FAILED = "system.health.failed"
+    CONFIG_CHANGED = "system.config.changed"
+    CONFIG_RELOADED = "system.config.reloaded"
+
+
+class LifecycleEvents:
+    """Service lifecycle event name constants."""
+
+    SERVICE_REGISTERED = "lifecycle.service.registered"
+    SERVICE_STARTING = "lifecycle.service.starting"
+    SERVICE_STARTED = "lifecycle.service.started"
+    SERVICE_STOPPING = "lifecycle.service.stopping"
+    SERVICE_STOPPED = "lifecycle.service.stopped"
+    SERVICE_FAILED = "lifecycle.service.failed"
 
 
 class AIEvents:
@@ -86,21 +118,18 @@ class WSReliabilityEvents:
     ACK_TIMEOUT = "ws.ack.timeout"
     RETRY_EXHAUSTED = "ws.retry.exhausted"
     RETRY_SCHEDULED = "ws.retry.scheduled"
-
     RECONNECT_SUCCESS = "ws.reconnect.success"
     RECONNECT_FAIL = "ws.reconnect.fail"
     RECONNECT_TOKEN_GENERATED = "ws.reconnect.token_generated"
     RECONNECT_TOKEN_REVOKED = "ws.reconnect.token_revoked"
-
     OFFLINE_QUEUE_DRAINED = "ws.offline_queue.drained"
     OFFLINE_QUEUE_OVERFLOW = "ws.offline_queue.overflow"
-
     STATS_REPORT = "ws.stats.report"
     LATENCY_UPDATE = "ws.latency.update"
 
 
 class WSProductionEvents:
-    """WebSocket production features & observability event name constants (P12-10)."""
+    """WebSocket production features & observability event name constants."""
 
     METRICS_UPDATED = "ws.metrics.updated"
     HEALTH_CHANGED = "ws.health.changed"

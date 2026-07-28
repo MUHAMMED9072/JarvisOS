@@ -1,7 +1,7 @@
 from app.client.ui.app import DesktopApplication
 from app.client.ui.window import MainWindow
 from app.client.ui.navigation import Navigator, NavigationHistory
-from app.client.ui.views import BaseView, PlaceholderView
+from app.client.ui.base_view import BaseView, PlaceholderView
 from app.client.ui.widgets import (
     StatusCard,
     MetricCard,
@@ -23,6 +23,24 @@ from app.client.ui.dialogs import (
 )
 from app.client.ui.theme import ThemeManager, ThemeMode
 from app.client.ui.bindings import StateBinding
+from app.client.ui.worker import AsyncWorker
+from app.client.ui.models import (
+    ChatMessage,
+    MetricSample,
+    ServerStatus,
+    SkillDescriptor,
+    PluginDescriptor,
+    ConversationEntry,
+    SettingsGroup,
+    HealthEvent,
+)
+from app.client.ui.pages import (
+    DashboardView,
+    AIChatView,
+    MonitorView,
+    SettingsView,
+    SkillsView,
+)
 
 __all__ = [
     "DesktopApplication",
@@ -49,4 +67,18 @@ __all__ = [
     "ThemeManager",
     "ThemeMode",
     "StateBinding",
+    "AsyncWorker",
+    "ChatMessage",
+    "MetricSample",
+    "ServerStatus",
+    "SkillDescriptor",
+    "PluginDescriptor",
+    "ConversationEntry",
+    "SettingsGroup",
+    "HealthEvent",
+    "DashboardView",
+    "AIChatView",
+    "MonitorView",
+    "SettingsView",
+    "SkillsView",
 ]

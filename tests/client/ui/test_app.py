@@ -126,8 +126,7 @@ class TestDesktopApplicationViewManagement:
                 mock_window = MagicMock()
                 MockWindow.return_value = mock_window
                 mock_window.mainloop.side_effect = KeyboardInterrupt()
-
-                from app.client.ui.views import PlaceholderView
+                from app.client.ui.base_view import PlaceholderView
 
                 app = DesktopApplication()
                 app.register_view("test", PlaceholderView, title="Test View", icon="🔬")
@@ -139,7 +138,7 @@ class TestDesktopApplicationViewManagement:
                 mock_window = MagicMock()
                 MockWindow.return_value = mock_window
 
-                from app.client.ui.views import PlaceholderView
+                from app.client.ui.base_view import PlaceholderView
 
                 app = DesktopApplication()
                 app.register_view("test", PlaceholderView, title="Test")
@@ -149,7 +148,7 @@ class TestDesktopApplicationViewManagement:
 
     def test_register_view_before_run(self):
         app = DesktopApplication()
-        from app.client.ui.views import PlaceholderView
+        from app.client.ui.base_view import PlaceholderView
 
         app.register_view("test", PlaceholderView, title="Pre-registered")
         assert app.navigator.get_title("test") == "Pre-registered"

@@ -2,9 +2,9 @@ JARVIS OS Sandbox Report
 Success: True
 Return code: 0
 Timed out: False
-Execution time: 0.1803s
-CPU time: 0.1094s
-Peak RAM: 11931648 bytes
+Execution time: 0.0631s
+CPU time: 0.0000s
+Peak RAM: 2064384 bytes
 Security violations: None
 
 STDOUT:

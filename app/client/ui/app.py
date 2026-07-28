@@ -11,6 +11,7 @@ from app.client.state import ClientState
 from app.client.ui.navigation import Navigator
 from app.client.ui.theme import ThemeManager
 from app.client.ui.window import MainWindow
+from app.client.ui.worker import AsyncWorker
 from app.core.config import Config
 
 logger = logging.getLogger("jarvis.client.ui.app")
@@ -25,6 +26,7 @@ class DesktopApplication:
         theme: Optional[ThemeManager] = None,
         navigator: Optional[Navigator] = None,
         config: Optional[Config] = None,
+        worker: Optional[AsyncWorker] = None,
     ):
         self._config = config or Config()
         self._events = events or EventDispatcher()
@@ -39,6 +41,7 @@ class DesktopApplication:
         self._state = state or self._client.state
         self._theme = theme or ThemeManager(self._events)
         self._navigator = navigator if navigator is not None else Navigator(self._events)
+        self._worker = worker or AsyncWorker()
         self._window: Optional[MainWindow] = None
         self._running = False
         self._shutdown_requested = False
@@ -77,15 +80,30 @@ class DesktopApplication:
             self._shutdown()
 
     def _register_views(self) -> None:
-        from app.client.ui.views import PlaceholderView
+        from app.client.ui.pages.dashboard import DashboardView
+        from app.client.ui.pages.chat import AIChatView
+        from app.client.ui.pages.monitor import MonitorView
+        from app.client.ui.pages.settings import SettingsView
+        from app.client.ui.pages.skills import SkillsView
 
-        self._navigator.register_view(
-            "dashboard",
-            PlaceholderView,
-            title="Dashboard",
-            icon="🏠",
-        )
-        self._window.add_sidebar_item("dashboard", "Dashboard", "🏠")
+        views: list[tuple[str, type, str, str]] = [
+            ("dashboard", DashboardView, "Dashboard", "🏠"),
+            ("chat", AIChatView, "AI Chat", "💬"),
+            ("monitor", MonitorView, "Monitor", "📊"),
+            ("settings", SettingsView, "Settings", "⚙️"),
+            ("skills", SkillsView, "Skills", "🧩"),
+        ]
+        for view_id, view_cls, title, icon in views:
+            self._navigator.register_view(
+                view_id,
+                view_cls,
+                title=title,
+                icon=icon,
+                client=self._client,
+                worker=self._worker,
+                config=self._config,
+            )
+            self._window.add_sidebar_item(view_id, title, icon)
 
     def register_view(self, view_id: str, view_class: type, **kwargs: Any) -> None:
         self._navigator.register_view(view_id, view_class, **kwargs)
@@ -116,6 +134,17 @@ class DesktopApplication:
         if self._window:
             try:
                 self._window.destroy()
+            except Exception:
+                pass
+        if self._worker:
+            self._worker.stop()
+        if self._client:
+            try:
+                import asyncio
+                try:
+                    asyncio.run(asyncio.wait_for(self._client.disconnect(), timeout=2.0))
+                except (RuntimeError, TypeError, asyncio.TimeoutError):
+                    pass
             except Exception:
                 pass
         self._running = False
