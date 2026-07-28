@@ -3,6 +3,7 @@ from app.agents.types import SystemAgent, ToolAgent, DevelopmentAgent, DomainAge
 from app.agents.factory import AgentFactory
 from app.agents.state_machine import AgentStateMachine, TransitionError, validate_transition, can_transition, allowed_transitions
 from app.agents.lifecycle import LifecycleManager, LifecycleEvent
+from app.agents.registry import AgentRegistry, AgentRegistration
 
 __all__ = [
     "Agent",
@@ -22,4 +23,6 @@ __all__ = [
     "allowed_transitions",
     "LifecycleManager",
     "LifecycleEvent",
+    "AgentRegistry",
+    "AgentRegistration",
 ]
