@@ -1,6 +1,13 @@
 from __future__ import annotations
 
 from app.executive_controller.core import ExecutiveController, SubsystemInfo, SubsystemStatus
+from app.executive_controller.emergency_handler import (
+    ComponentCriticality,
+    EmergencyEvent,
+    EmergencyHandler,
+    EmergencyMode,
+    PreservedAgentState,
+)
 from app.executive_controller.failure_recovery import (
     ComponentStatus,
     FailureRecovery,
@@ -34,7 +41,11 @@ from app.executive_controller.routing_strategies import (
 __all__ = [
     "AffinityStrategy",
     "AgentLoad",
+    "ComponentCriticality",
     "ComponentStatus",
+    "EmergencyEvent",
+    "EmergencyHandler",
+    "EmergencyMode",
     "ExecutiveController",
     "ExecutionRecord",
     "FailureRecovery",
@@ -48,6 +59,7 @@ __all__ = [
     "LoopDetector",
     "LoopReport",
     "LoopSeverity",
+    "PreservedAgentState",
     "PriorityLevel",
     "PriorityManager",
     "RecoveryPolicy",
