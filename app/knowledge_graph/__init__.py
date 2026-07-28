@@ -1,4 +1,5 @@
 from . import entity_types  # noqa: F401 — registers all entity types
+from . import relationship_types  # noqa: F401 — registers all relationship types
 from .entity import Entity
 from .index import EntityIndex, RelationshipIndex
 from .relationship import Relationship
@@ -15,6 +16,8 @@ from .traversal import PathResult, shortest_path, all_paths, bfs_traverse, dfs_t
 from .pattern_matcher import PatternMatcher, PatternTemplate, MatchResult
 from .query import QueryEngine, QueryResult
 from .optimizer import QueryOptimizer
+from .cascade import CircularDependencyError, would_create_cycle, validate_and_create
+from .batch import BatchResult, batch_create_relationships, batch_delete_relationships
 
 __all__ = [
     "ENTITY_TYPES",
@@ -29,6 +32,12 @@ __all__ = [
     "RelationshipIndex",
     "RelationshipType",
     "RelationshipTypeRegistry",
+    "CircularDependencyError",
+    "would_create_cycle",
+    "validate_and_create",
+    "BatchResult",
+    "batch_create_relationships",
+    "batch_delete_relationships",
     "PathResult",
     "shortest_path",
     "all_paths",
