@@ -1,0 +1,11 @@
+{
+  "context": {
+    "current_intent": null,
+    "current_skill": null,
+    "current_entities": {},
+    "recent_applications": [],
+    "active_tasks": [],
+    "history": []
+  },
+  "history": []
+}
