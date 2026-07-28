@@ -24,6 +24,7 @@ from .integrations.skill_registry import SkillRegistry, SkillRecord
 from .integrations.plugin_registry import PluginRegistry, PluginRecord
 from .integrations.api_registry import ApiRegistry, ApiRecord
 from .integrations.model_registry import ModelRegistry, ModelRecord
+from .capability_registry import CapabilityRegistry, ProviderInfo, GapAnalysis
 
 __all__ = [
     "ENTITY_TYPES",
@@ -69,4 +70,7 @@ __all__ = [
     "ApiRecord",
     "ModelRegistry",
     "ModelRecord",
+    "CapabilityRegistry",
+    "ProviderInfo",
+    "GapAnalysis",
 ]
