@@ -22,6 +22,7 @@ from app.ads.security_review import SecurityReport, SecurityReviewer
 from app.ads.test_generator import GeneratedTests, TestGenerator
 from app.ads.versioning import VersionManager
 from app.knowledge_graph.store import GraphStore
+from app.simulation.pipeline import SimulationPipeline
 
 
 class StageStatus(Enum):
@@ -63,6 +64,7 @@ class PipelineContext:
     security_report: SecurityReport | None = None
     performance_report: PerformanceReport | None = None
     benchmark_report: BenchmarkReport | None = None
+    simulation_report: SimulationReport | None = None
     governance_result: GovernanceResult | None = None
     install_result: InstallResult | None = None
     registration_result: RegistrationResult | None = None
@@ -118,6 +120,7 @@ class Pipeline:
         self._versioning = VersionManager(self._graph_store)
         self._metrics = MetricsCollector(self._graph_store)
         self._learning = LearningLoop(self._graph_store)
+        self._simulation = SimulationPipeline(self._graph_store)
 
     def run(self, request: str) -> PipelineReport:
         ctx = PipelineContext(request=request)
@@ -170,7 +173,10 @@ class Pipeline:
         # Stage 10: Benchmark
         stages.append(self._run_stage("benchmark", ctx, self._stage_benchmark))
 
-        # Stage 11: Governance
+        # Stage 11: Simulation (run before governance to inform risk scoring)
+        stages.append(self._run_stage("simulation", ctx, self._stage_simulation))
+
+        # Stage 12: Governance
         stages.append(self._run_stage("governance", ctx, self._stage_governance))
         if stages[-1].status == StageStatus.FAILED:
             return self._build_report(ctx, stages, start)
@@ -181,18 +187,18 @@ class Pipeline:
             report.error = "Governance check failed"
             return report
 
-        # Stage 12: Installation
+        # Stage 13: Installation
         stages.append(self._run_stage("installation", ctx, self._stage_install))
         if stages[-1].status == StageStatus.FAILED:
             return self._build_report(ctx, stages, start)
 
-        # Stage 13: Registration
+        # Stage 14: Registration
         stages.append(self._run_stage("registration", ctx, self._stage_registration))
 
-        # Stage 14: Versioning
+        # Stage 15: Versioning
         stages.append(self._run_stage("versioning", ctx, self._stage_versioning))
 
-        # Stage 15: Metrics Initialization
+        # Stage 16: Metrics Initialization
         stages.append(self._run_stage("metrics", ctx, self._stage_metrics))
 
         report = self._build_report(ctx, stages, start)
@@ -278,6 +284,21 @@ class Pipeline:
         ctx.benchmark_report = report
         return report
 
+    def _stage_simulation(self, ctx: PipelineContext) -> SimulationReport:
+        artifact_name = ctx.specs[0].name if ctx.specs else "artifact"
+        atype = ctx.content.manifest.get("type", "agent") if ctx.content else "agent"
+        source = ctx.source_code or ""
+        report = self._simulation.run(
+            artifact_name=artifact_name,
+            artifact_type=atype,
+            source_code=source,
+            entity_id=artifact_name,
+            permissions=None,
+            dependencies=None,
+        )
+        ctx.simulation_report = report
+        return report
+
     def _stage_governance(self, ctx: PipelineContext) -> GovernanceResult:
         artifact_name = ctx.specs[0].name if ctx.specs else "artifact"
         result = self._governance.check(
@@ -286,6 +307,7 @@ class Pipeline:
             security_report=ctx.security_report,
             performance_report=ctx.performance_report,
             benchmark_report=ctx.benchmark_report,
+            simulation_report=ctx.simulation_report,
         )
         ctx.governance_result = result
         return result

@@ -7,6 +7,7 @@ from app.ads.benchmark import BenchmarkReport
 from app.ads.performance_review import PerformanceReport
 from app.ads.security_review import SecurityReport
 from app.governance.trust_levels import TrustLevel, is_trust_level_at_least
+from app.simulation.pipeline import SimulationReport
 
 
 @dataclass
@@ -47,6 +48,7 @@ class GovernanceChecker:
         security_report: SecurityReport | None = None,
         performance_report: PerformanceReport | None = None,
         benchmark_report: BenchmarkReport | None = None,
+        simulation_report: SimulationReport | None = None,
     ) -> GovernanceResult:
         violations: list[str] = []
         risk_score = 0.0
@@ -78,6 +80,18 @@ class GovernanceChecker:
             if not benchmark_passed:
                 violations.append("Benchmark: below baseline")
                 risk_score += 15
+
+        # Simulation evaluation
+        if simulation_report:
+            sim_passed = simulation_report.passed
+            if not sim_passed:
+                violations.append(f"Simulation: {len(simulation_report.checks)} checks, not all passed")
+                risk_score += 20
+            for check_item in simulation_report.checks:
+                if check_item.status.value == "fail":
+                    risk_score += 15
+                elif check_item.status.value == "warn":
+                    risk_score += 5
 
         # Policy checks
         if not is_trust_level_at_least(level, TrustLevel.LOW):

@@ -106,7 +106,7 @@ class TestPipeline:
         expected = {
             "requirements", "capability_analysis", "gap_detection", "architecture",
             "content_generation", "test_generation", "sandbox", "security_review",
-            "performance_review", "benchmark", "governance", "installation",
+            "performance_review", "benchmark", "simulation", "governance", "installation",
             "registration", "versioning", "metrics",
         }
         assert stage_names == expected
