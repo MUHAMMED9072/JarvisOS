@@ -18,6 +18,7 @@ from app.ads.templates.code_templates import (
     TOOL_TEMPLATE,
     WORKFLOW_TEMPLATE,
 )
+from app.ads.paths import GENERATED_DIR
 from app.ads.type_registry import ArtifactTypeRegistry
 
 
@@ -60,10 +61,10 @@ class ContentGenerator:
     def __init__(
         self,
         registry: ArtifactTypeRegistry | None = None,
-        output_dir: str = "app/ads/generated",
+        output_dir: str | None = None,
     ) -> None:
         self._registry = registry or ArtifactTypeRegistry()
-        self._output_dir = Path(output_dir)
+        self._output_dir = Path(output_dir) if output_dir is not None else GENERATED_DIR
 
     def generate(self, spec: ArchitectureSpec) -> GeneratedContent:
         atype = spec.artifact_type

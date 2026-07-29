@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from app.ads.content_generator import GeneratedContent
+from app.ads.paths import INSTALLED_DIR
 
 
 @dataclass
@@ -55,8 +56,8 @@ class InstallResult:
 class Installer:
     """Install approved artifacts to the filesystem with rollback support."""
 
-    def __init__(self, base_path: str = "app/ads/installed") -> None:
-        self._base_path = Path(base_path)
+    def __init__(self, base_path: str | None = None) -> None:
+        self._base_path = Path(base_path) if base_path is not None else INSTALLED_DIR
 
     def install(
         self,

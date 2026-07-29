@@ -1,6 +1,7 @@
 ﻿from pathlib import Path
 
 from .templates import SKILL_TEMPLATE
+from app.ads.paths import GENERATED_DIR
 
 
 class SkillGenerator:
@@ -27,7 +28,7 @@ class SkillGenerator:
             body=repr(f"{skill_name} executed"),
         )
 
-        folder = Path("app/skills/generated")
+        folder = GENERATED_DIR / "skills"
         folder.mkdir(parents=True, exist_ok=True)
 
         init_file = folder / "__init__.py"

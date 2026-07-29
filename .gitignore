@@ -33,3 +33,9 @@ data/evolution/decisions/
 
 # Evolution Engine backups (kept locally for one-step rollback only)
 data/evolution/backups/
+
+# Runtime workspace — all generated, installed, cached, and temporary artifacts
+runtime/
+app/ads/installed/
+app/ads/generated/
+app/ads/backups/

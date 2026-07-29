@@ -24,7 +24,7 @@ def _make_content(name: str, atype: str = "Agent", caps: list[str] | None = None
             "description": f"A test {atype}",
             "capabilities": caps or [],
         },
-        base_path=f"ads/generated/{name}",
+        base_path=f"runtime/generated/{name}",
     )
 
 
