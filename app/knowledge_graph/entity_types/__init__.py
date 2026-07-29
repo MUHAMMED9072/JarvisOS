@@ -53,6 +53,7 @@ _register_if_new("pipeline", "A processing pipeline")
 # --- Events & Monitoring ---
 _register_if_new("event", "A system event")
 _register_if_new("metric", "A performance metric")
+_register_if_new("agent_metrics", "Agent-specific metrics data")
 _register_if_new("audit_log", "An audit log entry")
 _register_if_new("incident", "A system incident")
 

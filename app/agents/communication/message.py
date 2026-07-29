@@ -39,12 +39,12 @@ class DeliveryGuarantee(enum.Enum):
 
 MESSAGE_SCHEMAS: dict[MessageType, list[str]] = {
     MessageType.REQUEST: ["sender", "target", "action", "payload"],
-    MessageType.RESPONSE: ["sender", "target", "correlation_id", "status", "payload"],
+    MessageType.RESPONSE: ["sender", "target", "status", "payload"],
     MessageType.DELEGATE: ["sender", "target", "task_id", "payload"],
     MessageType.STATUS: ["sender", "status", "details"],
     MessageType.ESCALATE: ["sender", "target", "issue", "details"],
     MessageType.VOTE_REQUEST: ["sender", "group", "proposal", "options"],
-    MessageType.VOTE: ["sender", "group", "correlation_id", "choice"],
+    MessageType.VOTE: ["sender", "group", "choice"],
     MessageType.NEGOTIATE: ["sender", "target", "proposal", "counter"],
     MessageType.CONSENSUS: ["sender", "group", "decision", "payload"],
     MessageType.SHARE_MEMORY: ["sender", "target", "memory_key", "memory_entry"],
