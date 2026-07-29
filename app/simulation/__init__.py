@@ -8,9 +8,19 @@ from app.simulation.security_analyzer import (
     ExternalConnectionAnalysis, FileAccessAnalysis,
     DependencyVulnerability, DependencyVulnerabilityCheck,
 )
+from app.simulation.performance_modeler import PerformanceModeler, PerformanceEstimate, CalibrationEntry, ModelCalibration
+from app.simulation.security_analyzer import (
+    SecurityAnalyzer, SecurityImpactReport, PermissionAnalysis,
+    ExternalConnectionAnalysis, FileAccessAnalysis,
+    DependencyVulnerability, DependencyVulnerabilityCheck,
+)
 from app.simulation.regression_scorer import (
     RegressionScorer, RegressionRiskReport, DependencyDepthAnalysis,
     ScopeAnalysis, HistoricalMatch,
+)
+from app.simulation.failure_simulator import (
+    FailureSimulator, FailureImpactReport, CascadeAnalysis,
+    DegradationAnalysis, RecoveryAnalysis, CascadeNode,
 )
 
 __all__ = [
@@ -23,4 +33,6 @@ __all__ = [
     "DependencyVulnerability", "DependencyVulnerabilityCheck",
     "RegressionScorer", "RegressionRiskReport", "DependencyDepthAnalysis",
     "ScopeAnalysis", "HistoricalMatch",
+    "FailureSimulator", "FailureImpactReport", "CascadeAnalysis",
+    "DegradationAnalysis", "RecoveryAnalysis", "CascadeNode",
 ]
