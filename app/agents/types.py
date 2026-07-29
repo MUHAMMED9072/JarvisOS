@@ -18,16 +18,43 @@ class SystemAgent(Agent):
 
 
 class ToolAgent(Agent):
-    """Agent that wraps a specific tool."""
+    """Agent that wraps a specific tool and executes via ToolExecutor."""
 
-    def __init__(self, tool_name: str = "", metadata: AgentMetadata | None = None) -> None:
+    def __init__(
+        self,
+        tool_name: str = "",
+        executor: Any = None,
+        metadata: AgentMetadata | None = None,
+    ) -> None:
         if metadata is None:
             metadata = AgentMetadata(agent_id="", name=f"tool_{tool_name}", agent_type="tool")
         super().__init__(metadata)
         self.tool_name = tool_name
+        self._executor = executor
+
+    def set_executor(self, executor: Any) -> None:
+        self._executor = executor
 
     def execute(self, context: dict[str, Any]) -> dict[str, Any]:
-        return {"status": "ok", "tool": self.tool_name, "input": context}
+        if self._executor is None:
+            return {"status": "ok", "tool": self.tool_name, "input": context}
+
+        from app.tools.integration.executor import ToolExecutionRequest
+        req = ToolExecutionRequest(
+            tool_name=self.tool_name,
+            params=context.get("params", {}),
+            context={"agent_id": self.agent_id, **context.get("metadata", {})},
+        )
+        result = self._executor.execute(req)
+        return {
+            "status": "ok" if result.success else "error",
+            "tool": self.tool_name,
+            "success": result.success,
+            "output": result.output,
+            "error": result.error_message,
+            "execution_time": result.execution_time,
+            "trace_id": result.trace_id,
+        }
 
 
 class DevelopmentAgent(Agent):
