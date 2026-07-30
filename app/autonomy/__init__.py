@@ -1,5 +1,14 @@
 from __future__ import annotations
 
+from app.autonomy.dashboard.dashboard_service import (
+    AlertConfig,
+    AlertLevel,
+    DashboardService,
+    EvolutionRequest,
+    InterventionResult,
+    PolicyConfig,
+    SystemSnapshot,
+)
 from app.autonomy.orchestrator import (
     AgentRole,
     AgentTeam,
@@ -22,14 +31,21 @@ from app.autonomy.project_manager import (
 __all__ = [
     "AgentRole",
     "AgentTeam",
+    "AlertConfig",
+    "AlertLevel",
     "ConflictRecord",
     "ConflictSeverity",
+    "DashboardService",
+    "EvolutionRequest",
+    "InterventionResult",
     "Milestone",
+    "PolicyConfig",
     "Project",
     "ProjectManager",
     "ProjectPhase",
     "ProjectReport",
     "ProjectStatus",
+    "SystemSnapshot",
     "Workflow",
     "WorkflowOrchestrator",
     "WorkflowStatus",
