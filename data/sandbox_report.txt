@@ -5,7 +5,7 @@ Timed out: False
 Execution time: 0.0000s
 CPU time: 0.0000s
 Peak RAM: 0 bytes
-Security violations: Path traversal or absolute path: '/todos/', Path traversal or absolute path: '/todos/{todo_id}'
+Security violations: Blocked operation: os.walk
 
 STDOUT:
 

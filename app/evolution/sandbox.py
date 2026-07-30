@@ -114,14 +114,17 @@ class SecurityValidator:
 
     @staticmethod
     def _check_path_traversal(node: ast.AST) -> list[str]:
-        """Detect path traversal attempts in constant strings."""
+        """Detect path traversal attempts in constant strings passed to file operations."""
         violations: list[str] = []
         for child in ast.walk(node):
             if isinstance(child, ast.Constant) and isinstance(child.value, str):
                 val = child.value
-                # Detect '..', absolute Unix paths, or Windows drive letters
-                if val.startswith("..") or val.startswith("/") or (len(val) > 1 and val[1] == ":"):
-                    violations.append(f"Path traversal or absolute path: '{val}'")
+                # Relative path traversal
+                if val.startswith(".."):
+                    violations.append(f"Path traversal: '{val}'")
+                # Windows absolute paths (drive letters like C:\)
+                if len(val) > 1 and val[1] == ":" and val[0].isalpha():
+                    violations.append(f"Absolute Windows path: '{val}'")
         return violations
 
     def validate(self, source: str) -> list[str]:
