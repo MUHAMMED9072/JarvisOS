@@ -16,8 +16,28 @@ def test_cli_import():
 def test_cli_build_command():
     from app.cli import run_build
     from app.autonomy.build_orchestrator import BuildOrchestrator
+    from unittest.mock import MagicMock
+    from pathlib import Path
 
-    orch = BuildOrchestrator()
+    for d in ["runtime/build_checkpoints", "runtime/build_history"]:
+        p = Path(d)
+        if p.exists():
+            for f in p.iterdir():
+                f.unlink(missing_ok=True)
+
+    mock_ai = MagicMock()
+    mock_ai.ask.return_value = "Python tool"
+    mock_ads = MagicMock()
+    mock_ads.run.return_value = MagicMock(to_dict=lambda: {"artifact": "test"})
+    mock_sim = MagicMock()
+    mock_sim.run.return_value = MagicMock(to_dict=lambda: {"passed": True})
+    mock_sandbox = MagicMock()
+    mock_sandbox.run_code.return_value = MagicMock(to_dict=lambda: {"passed": True})
+    mock_sandbox.run_tests.return_value = MagicMock(to_dict=lambda: {"passed": True})
+    orch = BuildOrchestrator(
+        ai_manager=mock_ai, ads_pipeline=mock_ads,
+        simulation_pipeline=mock_sim, sandbox=mock_sandbox,
+    )
     with patch("app.cli.console.print"):
         run_build(orch, "Build a test")
     stats = orch.get_statistics()

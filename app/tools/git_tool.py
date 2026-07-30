@@ -16,7 +16,7 @@ class GitTool(Tool):
 
     Parameters:
       - action (required): Git operation (clone, init, add, commit, push,
-        pull, branch, merge, diff, log, status, checkout, remote)
+        pull, branch, merge, diff, log, status, checkout, remote, rev_parse)
       - repo_path: Path to local repository (default: current directory)
       - repo_url: Remote repository URL (for clone action)
       - message: Commit message (for commit action)
@@ -175,6 +175,14 @@ class GitTool(Tool):
                 ret, out, err = self._run_git(["status"], repo_path, timeout)
                 elapsed = time.time() - start
                 return ToolResult(success=ret == 0, output={"stdout": out, "stderr": err}, error_message=err if ret != 0 else "", execution_time=elapsed, stdout=out)
+
+            elif action == "rev_parse":
+                ref = params.get("args", "HEAD")
+                if isinstance(ref, str):
+                    ref = ref.split()
+                ret, out, err = self._run_git(["rev-parse"] + ref, repo_path, timeout)
+                elapsed = time.time() - start
+                return ToolResult(success=ret == 0, output={"hash": out.strip()}, error_message=err if ret != 0 else "", execution_time=elapsed, stdout=out)
 
             elif action == "remote":
                 remote = params.get("remote", "")

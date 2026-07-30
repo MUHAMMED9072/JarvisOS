@@ -35,6 +35,20 @@ class RegistrationResult:
 class Registration:
     """Register artifacts in the Knowledge Graph."""
 
+    # Map ADS artifact types to KG entity types.
+    ADS_TO_KG_TYPE: dict[str, str] = {
+        "Agent": "agent",
+        "Tool": "tool",
+        "Plugin": "plugin",
+        "Skill": "skill",
+        "Workflow": "workflow",
+        "Pipeline": "pipeline",
+        "KnowledgePack": "knowledge",
+        "TestSuite": "artifact",
+        "Integration": "code_module",
+        "Documentation": "artifact",
+    }
+
     def __init__(
         self,
         graph_store: GraphStore,
@@ -51,10 +65,11 @@ class Registration:
         content: GeneratedContent,
     ) -> RegistrationResult:
         atype = content.manifest.get("type", "Agent")
+        kg_type = self.ADS_TO_KG_TYPE.get(atype, "artifact")
 
         # Create entity in KG
         entity = self._store.create_entity(
-            type=atype.lower(),
+            type=kg_type,
             name=artifact_name,
             properties={
                 "manifest": str(content.manifest),

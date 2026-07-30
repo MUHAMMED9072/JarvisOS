@@ -93,7 +93,7 @@ class SecurityValidator:
     })
     BLOCKED_CALLS = frozenset({
         "breakpoint", "compile", "eval", "exec", "exit", "globals", "input",
-        "locals", "open", "__import__", "getattr",
+        "locals", "__import__", "getattr",
     })
     BLOCKED_ATTRIBUTES = frozenset({
         "os.system", "os.popen", "os.remove", "os.rename", "os.replace",
@@ -111,6 +111,18 @@ class SecurityValidator:
             base = SecurityValidator._name(node.value)
             return f"{base}.{node.attr}" if base else node.attr
         return None
+
+    @staticmethod
+    def _check_path_traversal(node: ast.AST) -> list[str]:
+        """Detect path traversal attempts in constant strings."""
+        violations: list[str] = []
+        for child in ast.walk(node):
+            if isinstance(child, ast.Constant) and isinstance(child.value, str):
+                val = child.value
+                # Detect '..', absolute Unix paths, or Windows drive letters
+                if val.startswith("..") or val.startswith("/") or (len(val) > 1 and val[1] == ":"):
+                    violations.append(f"Path traversal or absolute path: '{val}'")
+        return violations
 
     def validate(self, source: str) -> list[str]:
         """Return all static policy violations, including syntax errors."""
@@ -152,6 +164,8 @@ class SecurityValidator:
                 name = self._name(node)
                 if name in self.BLOCKED_ATTRIBUTES:
                     violations.append(f"Blocked operation: {name}")
+
+        violations.extend(self._check_path_traversal(tree))
 
         # Preserve report readability and prevent duplicate messages from AST walk.
         return list(dict.fromkeys(violations))

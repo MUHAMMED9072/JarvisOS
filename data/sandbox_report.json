@@ -1,13 +1,13 @@
 {
   "success": true,
   "returncode": 0,
-  "stdout": "timing\n",
+  "stdout": "",
   "stderr": "",
-  "execution_time": 0.060422000009566545,
-  "cpu_time": 0.0,
-  "peak_ram_bytes": 2068480,
+  "execution_time": 0.1119553999742493,
+  "cpu_time": 0.03125,
+  "peak_ram_bytes": 11550720,
   "timed_out": false,
-  "workspace": "C:\\Users\\nsmuh\\AppData\\Local\\Temp\\jarvis-sandbox-oxrqakw9",
+  "workspace": "C:\\Users\\nsmuh\\AppData\\Local\\Temp\\jarvis-sandbox-ohxavq9o",
   "security_violations": [],
-  "reported_at": "2026-07-29T01:49:17Z"
+  "reported_at": "2026-07-30T04:12:33Z"
 }
