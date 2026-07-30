@@ -2,12 +2,12 @@
   "success": false,
   "returncode": 1,
   "stdout": "",
-  "stderr": "Traceback (most recent call last):\n  File \"C:\\Users\\nsmuh\\AppData\\Local\\Temp\\jarvis-sandbox-f23svrk3\\sandbox.py\", line 31, in <module>\n    kb.set_key(\"key1\", \"value1\")\n    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\nsmuh\\AppData\\Local\\Temp\\jarvis-sandbox-f23svrk3\\sandbox.py\", line 9, in set_key\n    with open(self.filename, 'r+') as f:\n         ~~~~^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: 'test.json'\n",
-  "execution_time": 0.16481539991218597,
-  "cpu_time": 0.078125,
-  "peak_ram_bytes": 14565376,
+  "stderr": "Traceback (most recent call last):\n  File \"C:\\Users\\nsmuh\\AppData\\Local\\Temp\\jarvis-sandbox-y2ugo_j_\\sandbox.py\", line 35, in <module>\n    from file_based_key import KeyValueStore\nModuleNotFoundError: No module named 'file_based_key'\n",
+  "execution_time": 0.9806245999643579,
+  "cpu_time": 0.765625,
+  "peak_ram_bytes": 30248960,
   "timed_out": false,
-  "workspace": "C:\\Users\\nsmuh\\AppData\\Local\\Temp\\jarvis-sandbox-f23svrk3",
+  "workspace": "C:\\Users\\nsmuh\\AppData\\Local\\Temp\\jarvis-sandbox-y2ugo_j_",
   "security_violations": [],
-  "reported_at": "2026-07-30T04:23:41Z"
+  "reported_at": "2026-07-30T04:35:10Z"
 }

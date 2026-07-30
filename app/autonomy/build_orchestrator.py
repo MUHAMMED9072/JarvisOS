@@ -606,13 +606,30 @@ class BuildOrchestrator:
         return "passed"
 
     def _auto_fix(self, result: BuildResult, request: str, ads_out: dict[str, Any], failure_type: str = "runtime") -> dict[str, Any]:
-        sandbox_out = ads_out.get("_sandbox_out", "")
-        test_out = ads_out.get("_test_out", "")
+        sandbox_out = ads_out.get("_sandbox_out", {})
+        test_out = ads_out.get("_test_out", {})
         error_context = ""
-        if sandbox_out:
-            error_context += f"Execution error:\n{sandbox_out}\n"
-        if test_out:
-            error_context += f"Test errors:\n{test_out}\n"
+        if sandbox_out and isinstance(sandbox_out, dict):
+            err_lines = []
+            stderr = sandbox_out.get("stderr", "")
+            if stderr:
+                err_lines.append(stderr[:2000])
+            error_context = "Execution stderr:\n" + "\n".join(err_lines) if err_lines else ""
+        if test_out and isinstance(test_out, dict):
+            stdout = test_out.get("stdout", "")
+            stderr = test_out.get("stderr", "")
+            lines = []
+            if stdout:
+                # Extract only failure lines from pytest output
+                for line in stdout.splitlines():
+                    if "FAILED" in line or "ERROR" in line or "assert" in line:
+                        lines.append(line)
+                if not lines:
+                    lines.append(stdout[:2000])
+            if stderr:
+                lines.append(stderr[:1000])
+            if lines:
+                error_context += "\nTest results:\n" + "\n".join(lines)
         if not error_context:
             return ads_out
         mod_name = self._safe_filename(request)
@@ -639,8 +656,9 @@ class BuildOrchestrator:
                         fixed_file = f
                         break
             fixed_file.write_text(fixed_code, encoding="utf-8")
-            # Only regenerate tests for test_failure or first generation
-            if failure_type in ("test_failure", "runtime"):
+            # Only regenerate tests for runtime failures (code may be completely different).
+            # For test_failure, keep existing tests as ground truth and only fix the implementation.
+            if failure_type not in ("test_failure",):
                 test_prompt = (
                     f"Write pytest tests for this Python code. Cover all functions.\n\n"
                     f"Module name: {mod_name}\n"
