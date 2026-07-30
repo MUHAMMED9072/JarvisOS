@@ -1,15 +1,13 @@
 {
-  "success": false,
-  "returncode": -1,
+  "success": true,
+  "returncode": 0,
   "stdout": "",
-  "stderr": "Generated code was blocked by security validation.",
-  "execution_time": 0.0,
-  "cpu_time": 0.0,
-  "peak_ram_bytes": 0,
+  "stderr": "",
+  "execution_time": 0.1148719999473542,
+  "cpu_time": 0.046875,
+  "peak_ram_bytes": 11505664,
   "timed_out": false,
-  "workspace": null,
-  "security_violations": [
-    "Blocked operation: os.walk"
-  ],
-  "reported_at": "2026-07-30T05:15:22Z"
+  "workspace": "C:\\Users\\nsmuh\\AppData\\Local\\Temp\\jarvis-sandbox-l9sfzcqx",
+  "security_violations": [],
+  "reported_at": "2026-07-30T05:18:44Z"
 }

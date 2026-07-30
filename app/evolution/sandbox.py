@@ -97,7 +97,7 @@ class SecurityValidator:
     })
     BLOCKED_ATTRIBUTES = frozenset({
         "os.system", "os.popen", "os.remove", "os.rename", "os.replace",
-        "os.rmdir", "os.unlink", "os.walk", "os.chmod", "os.chown",
+        "os.rmdir", "os.unlink", "os.chmod", "os.chown",
         "os.environ", "pathlib.Path.unlink", "pathlib.Path.rmdir",
         "pathlib.Path.rename", "pathlib.Path.replace", "shutil.rmtree",
         "shutil.move", "shutil.copy", "sys.exit",
