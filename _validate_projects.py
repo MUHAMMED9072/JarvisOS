@@ -47,7 +47,7 @@ def run_one(label, request):
             if st.get("stage_name") == "registration" and st.get("status") == "failed":
                 reg_ok = False
 
-    passed = result.status.name == "COMPLETED" and result.error is None
+    passed = result.status.name == "COMPLETED" and not result.error
     print("-" * 60)
     print(f"{label}")
     print(f"  Status:       {result.status.name}")
