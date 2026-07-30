@@ -1,13 +1,16 @@
 {
   "success": false,
-  "returncode": 1,
+  "returncode": -1,
   "stdout": "",
-  "stderr": "Traceback (most recent call last):\n  File \"C:\\Users\\nsmuh\\AppData\\Local\\Temp\\jarvis-sandbox-y2ugo_j_\\sandbox.py\", line 35, in <module>\n    from file_based_key import KeyValueStore\nModuleNotFoundError: No module named 'file_based_key'\n",
-  "execution_time": 0.9806245999643579,
-  "cpu_time": 0.765625,
-  "peak_ram_bytes": 30248960,
+  "stderr": "Generated code was blocked by security validation.",
+  "execution_time": 0.0,
+  "cpu_time": 0.0,
+  "peak_ram_bytes": 0,
   "timed_out": false,
-  "workspace": "C:\\Users\\nsmuh\\AppData\\Local\\Temp\\jarvis-sandbox-y2ugo_j_",
-  "security_violations": [],
-  "reported_at": "2026-07-30T04:35:10Z"
+  "workspace": null,
+  "security_violations": [
+    "Path traversal or absolute path: '/todos/'",
+    "Path traversal or absolute path: '/todos/{todo_id}'"
+  ],
+  "reported_at": "2026-07-30T04:40:43Z"
 }

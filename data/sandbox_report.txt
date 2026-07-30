@@ -1,17 +1,14 @@
 JARVIS OS Sandbox Report
 Success: False
-Return code: 1
+Return code: -1
 Timed out: False
-Execution time: 0.9806s
-CPU time: 0.7656s
-Peak RAM: 30248960 bytes
-Security violations: None
+Execution time: 0.0000s
+CPU time: 0.0000s
+Peak RAM: 0 bytes
+Security violations: Path traversal or absolute path: '/todos/', Path traversal or absolute path: '/todos/{todo_id}'
 
 STDOUT:
 
 
 STDERR:
-Traceback (most recent call last):
-  File "C:\Users\nsmuh\AppData\Local\Temp\jarvis-sandbox-y2ugo_j_\sandbox.py", line 35, in <module>
-    from file_based_key import KeyValueStore
-ModuleNotFoundError: No module named 'file_based_key'
+Generated code was blocked by security validation.
