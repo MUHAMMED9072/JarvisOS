@@ -60,5 +60,11 @@ _register_if_new("incident", "A system incident")
 # --- Policy ---
 _register_if_new("policy", "A governance policy")
 
+# --- Evolution ---
+_register_if_new("evolution_attempt", "A self-evolution attempt with outcome")
+_register_if_new("evolution_scan", "A scan result identifying improvement opportunities")
+_register_if_new("evolution_patch", "A generated patch for self-evolution")
+_register_if_new("evolution_strategy", "A meta-evolution strategy")
+
 # --- General ---
 _register_if_new("concept", "A generic concept or idea")
