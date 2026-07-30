@@ -1,13 +1,21 @@
 JARVIS OS Sandbox Report
-Success: True
-Return code: 0
+Success: False
+Return code: 1
 Timed out: False
-Execution time: 0.1115s
-CPU time: 0.0469s
-Peak RAM: 11530240 bytes
+Execution time: 0.1648s
+CPU time: 0.0781s
+Peak RAM: 14565376 bytes
 Security violations: None
 
 STDOUT:
 
 
 STDERR:
+Traceback (most recent call last):
+  File "C:\Users\nsmuh\AppData\Local\Temp\jarvis-sandbox-f23svrk3\sandbox.py", line 31, in <module>
+    kb.set_key("key1", "value1")
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "C:\Users\nsmuh\AppData\Local\Temp\jarvis-sandbox-f23svrk3\sandbox.py", line 9, in set_key
+    with open(self.filename, 'r+') as f:
+         ~~~~^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'test.json'
