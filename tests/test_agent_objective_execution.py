@@ -57,6 +57,18 @@ class FakeAI:
         )
 
 
+class _JsonAI:
+    """Fake AI that returns JSON with agent_type = 'development',
+    simulating the AI overriding an explicit user 'domain' request."""
+
+    def __init__(self) -> None:
+        self.prompts: list[str] = []
+
+    def ask(self, *args, **_kwargs) -> str:
+        self.prompts.append(args[1] if len(args) > 1 else args[0] if args else "")
+        return '{"name": "DevAgent", "agent_type": "development", "objective": "test"}'
+
+
 class _Reg:
     def __init__(self, name: str):
         self.name = name
@@ -464,3 +476,24 @@ class TestDesktopCreationPath:
         assert agent._capabilities_registry is None
         res = agent.execute({"request": "inspect"})
         assert res == {"status": "ok", "domain": "general", "query": "inspect"}
+
+    def test_build_agent_spec_preserves_explicit_domain_type(self):
+        """F. _build_agent_spec preserves explicit user agent type
+        (e.g. 'domain agent') over the AI's generated agent_type
+        (which would otherwise choose 'development')."""
+        ai = _JsonAI()
+        registry = _FakeAgentRegistry()
+        router = ExecutionRouter(ai=ai, agents=registry, event_bus=None, graph=None)
+        request = "domain agent, execute your assigned objective now. Inspect the project."
+        spec_text, spec = router._build_agent_spec(request)
+        assert spec["agent_type"] == "domain"
+
+    def test_build_agent_spec_preserves_other_explicit_types(self):
+        """F1. _build_agent_spec also preserves other explicit types
+        (e.g. 'system agent') over the AI's generated agent_type."""
+        ai = _JsonAI()
+        registry = _FakeAgentRegistry()
+        router = ExecutionRouter(ai=ai, agents=registry, event_bus=None, graph=None)
+        request = "system agent, manage system-level operations."
+        spec_text, spec = router._build_agent_spec(request)
+        assert spec["agent_type"] == "system"

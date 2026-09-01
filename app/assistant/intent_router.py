@@ -49,6 +49,11 @@ ROUTE_TIME = "time"
 ROUTE_SEO = "seo"
 ROUTE_TOOL = "tool"
 
+_AGENT_TYPE_PATTERN = re.compile(
+    r"\b(system|tool|development|domain|composite)\s*agent\b",
+    re.IGNORECASE,
+)
+
 MAX_REPLY_CHARS: int = 4000
 
 # Session lifecycle states for agent instances (P21-27).
@@ -2677,6 +2682,9 @@ class ExecutionRouter:
         text = str(answer)
         data = _extract_json(text)
         spec = data if isinstance(data, dict) and data else {}
+        _type_match = _AGENT_TYPE_PATTERN.search(request)
+        if _type_match:
+            spec["agent_type"] = _type_match.group(1).lower()
         if not spec:
             return (
                 "AGENT PROPOSAL\n\n"
