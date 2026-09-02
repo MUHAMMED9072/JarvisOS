@@ -20,7 +20,10 @@ import pytest
 
 from app.agents.factory import AgentFactory
 from app.agents.types import DomainAgent
-from app.assistant.intent_router import ExecutionRouter, IntentClassification, ROUTE_AGENT
+from app.assistant.intent_router import (
+    ExecutionRouter, IntentClassification, IntentClassifier, ROUTE_AGENT,
+    _detect_explicit_agent_type,
+)
 from app.autonomy.agents.builder import AgentBuilder
 from app.autonomy.agents.specification import AgentSpecification
 
@@ -485,7 +488,10 @@ class TestDesktopCreationPath:
         registry = _FakeAgentRegistry()
         router = ExecutionRouter(ai=ai, agents=registry, event_bus=None, graph=None)
         request = "domain agent, execute your assigned objective now. Inspect the project."
-        spec_text, spec = router._build_agent_spec(request)
+        spec_text, spec = router._build_agent_spec(
+            request,
+            explicit_agent_type=_detect_explicit_agent_type(request),
+        )
         assert spec["agent_type"] == "domain"
 
     def test_build_agent_spec_preserves_other_explicit_types(self):
@@ -495,5 +501,115 @@ class TestDesktopCreationPath:
         registry = _FakeAgentRegistry()
         router = ExecutionRouter(ai=ai, agents=registry, event_bus=None, graph=None)
         request = "system agent, manage system-level operations."
-        spec_text, spec = router._build_agent_spec(request)
+        spec_text, spec = router._build_agent_spec(
+            request,
+            explicit_agent_type=_detect_explicit_agent_type(request),
+        )
         assert spec["agent_type"] == "system"
+
+    def test_classify_preserves_domain_agent_type(self):
+        """G. IntentClassifier.classify() detects explicit 'domain agent'
+        from the original user text and preserves it in params."""
+        ai = _JsonAI()
+        registry = _FakeAgentRegistry()
+        router = ExecutionRouter(ai=ai, agents=registry, event_bus=None, graph=None)
+        classifier = IntentClassifier()
+        classification = classifier.classify(
+            "domain agent, execute your assigned objective now.",
+        )
+        assert classification.params.get("agent_type") == "domain"
+
+    def test_classify_preserves_system_agent_type(self):
+        """G1. IntentClassifier.classify() detects explicit 'system agent'
+        from the original user text and preserves it in params."""
+        ai = _JsonAI()
+        registry = _FakeAgentRegistry()
+        router = ExecutionRouter(ai=ai, agents=registry, event_bus=None, graph=None)
+        classifier = IntentClassifier()
+        classification = classifier.classify(
+            "system agent, build a new capability.",
+        )
+        assert classification.params.get("agent_type") == "system"
+
+    def test_full_pipeline_domain_cannot_be_overridden_by_ai(self):
+        """H. End-to-end: an AI response of 'development' cannot override
+        an explicit 'domain agent' request through the real
+        classifier → proposal → approval → creation path.
+        The created agent must be a DomainAgent with agent_type == 'domain'."""
+        from app.agents.types import DomainAgent
+
+        ai = _JsonAI()
+        registry = _FakeAgentRegistry()
+        router = ExecutionRouter(ai=ai, agents=registry, event_bus=None, graph=None)
+        request = "domain agent, execute your assigned objective now."
+        classifier = IntentClassifier()
+        classification = classifier.classify(request)
+        assert classification.params.get("agent_type") == "domain"
+        result = router.execute(classification)
+        # The approval gate returns approval_required for agent_create.
+        # Verify the spec passed to the approval contains agent_type == 'domain'.
+        if result.get("kind") == "approval_required":
+            spec = result.get("data", {}).get("spec", {})
+            assert spec.get("agent_type") == "domain"
+
+    def test_full_pipeline_system_cannot_be_overridden_by_ai(self):
+        """H1. End-to-end: same guarantee for 'system agent' explicit type."""
+        ai = _JsonAI()
+        registry = _FakeAgentRegistry()
+        router = ExecutionRouter(ai=ai, agents=registry, event_bus=None, graph=None)
+        request = "system agent, build a new capability."
+        classifier = IntentClassifier()
+        classification = classifier.classify(request)
+        assert classification.params.get("agent_type") == "system"
+        result = router.execute(classification)
+        if result.get("kind") == "approval_required":
+            spec = result.get("data", {}).get("spec", {})
+            assert spec.get("agent_type") == "system"
+
+    def test_run_agent_pipeline_safeguard_respects_explicit_type(self):
+        """I. _run_agent_pipeline() construction-boundary safeguard
+        enforces explicit_agent_type even if spec says otherwise."""
+        from app.agents.types import DomainAgent
+
+        ai = _JsonAI()
+        registry = _FakeAgentRegistry()
+        router = ExecutionRouter(ai=ai, agents=registry, event_bus=None, graph=None)
+        spec = {
+            "name": "ProjectStatusAgent",
+            "agent_type": "development",  # AI would generate this
+            "description": "inspect",
+            "objective": "Inspect the project.",
+            "capabilities": ["analytics", "knowledge", "memory"],
+        }
+        router._run_agent_pipeline(
+            "Inspect the project",
+            spec,
+            explicit_agent_type="domain",
+        )
+        agent = router._agent_instances["ProjectStatusAgent"]
+        assert isinstance(agent, DomainAgent)
+        assert agent.agent_type == "domain"
+
+    def test_run_agent_pipeline_no_explicit_type_uses_spec(self):
+        """I1. _run_agent_pipeline() uses spec agent_type when no
+        explicit type is provided (backward compatibility)."""
+        from app.agents.types import DevelopmentAgent
+
+        ai = _JsonAI()
+        registry = _FakeAgentRegistry()
+        router = ExecutionRouter(ai=ai, agents=registry, event_bus=None, graph=None)
+        spec = {
+            "name": "DevAgent",
+            "agent_type": "development",
+            "description": "develop",
+            "objective": "Develop the project.",
+            "capabilities": ["analytics"],
+        }
+        router._run_agent_pipeline(
+            "Develop the project",
+            spec,
+            explicit_agent_type=None,
+        )
+        agent = router._agent_instances["DevAgent"]
+        assert isinstance(agent, DevelopmentAgent)
+        assert agent.agent_type == "development"

@@ -54,6 +54,14 @@ _AGENT_TYPE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+
+def _detect_explicit_agent_type(text: str) -> str | None:
+    """Detect an explicit agent type (domain, system, tool, development,
+    composite) from *text*. Returns the lowercased type or None."""
+    match = _AGENT_TYPE_PATTERN.search(text)
+    return match.group(1).lower() if match else None
+
+
 MAX_REPLY_CHARS: int = 4000
 
 # Session lifecycle states for agent instances (P21-27).
@@ -1232,13 +1240,28 @@ class IntentClassifier:
         Unmatched requests are classified as ``conversation`` (the AI
         fallback route).
         """
+        # Preserve explicit agent-type intent (e.g. "domain agent")
+        # from the original user text so _build_agent_spec() can
+        # override the AI's advisory agent_type choice. This must
+        # happen before any early returns so the type survives even
+        # when the parser cannot classify the request.
+        explicit_agent_type = _detect_explicit_agent_type(text)
+
         request = self._parser.parse(text)
         if request is None:
+            params = {"agent_type": explicit_agent_type} if explicit_agent_type is not None else {}
             return IntentClassification(
                 route=ROUTE_CONVERSATION,
                 source="fallback",
+                params=params,
                 confidence=0.0,
             )
+
+        if explicit_agent_type is not None:
+            params = dict(request.params)
+            params["agent_type"] = explicit_agent_type
+        else:
+            params = request.params
 
         if request.route == ROUTE_AGENT:
             name = _normalize_agent_name(request.target or "")
@@ -1249,10 +1272,13 @@ class IntentClassifier:
                     matched = a
                     break
             if matched is None:
-                # No such agent -> treat as a conversation (AI).
+                # No such agent -> treat as a conversation (AI),
+                # but preserve explicit agent-type intent detected
+                # from the original user text.
                 return IntentClassification(
                     route=ROUTE_CONVERSATION,
                     source="agent-unmatched",
+                    params=params,
                     confidence=0.0,
                 )
             # Resolve to the canonical (registered) name so downstream
@@ -1262,7 +1288,7 @@ class IntentClassifier:
             return IntentClassification(
                 route=request.route,
                 target=matched,
-                params=request.params,
+                params=params,
                 confidence=0.98,
                 source=request.source,
             )
@@ -1270,7 +1296,7 @@ class IntentClassifier:
         return IntentClassification(
             route=request.route,
             target=request.target,
-            params=request.params,
+            params=params,
             confidence=0.98,
             source=request.source,
         )
@@ -1390,7 +1416,10 @@ class ExecutionRouter:
         if route == ROUTE_OBJECTIVE:
             return self._execute_objective(classification.params.get("request", ""))
         if route == ROUTE_AGENT_CREATE:
-            return self._propose_agent(classification.params.get("request", ""))
+            return self._propose_agent(
+                classification.params.get("request", ""),
+                explicit_agent_type=classification.params.get("agent_type"),
+            )
         if route == ROUTE_TIME:
             return self._execute_time()
         if route == ROUTE_SEO:
@@ -2551,14 +2580,20 @@ class ExecutionRouter:
             lines.append(f"Communication: {spec['communication']}")
         return "\n".join(lines)
 
-    def _propose_agent(self, request: str) -> dict[str, Any]:
+    def _propose_agent(
+        self,
+        request: str,
+        explicit_agent_type: str | None = None,
+    ) -> dict[str, Any]:
         """Design an agent (name / responsibilities / tools / memory ...)."""
         if self._ai is None or self._approval is None or self._agents is None:
             return {
                 "kind": "reply",
                 "text": "Agent creation is not available right now.",
             }
-        spec_text, spec = self._build_agent_spec(request)
+        spec_text, spec = self._build_agent_spec(
+            request, explicit_agent_type=explicit_agent_type,
+        )
         if spec_text is None:
             return {
                 "kind": "reply",
@@ -2572,7 +2607,10 @@ class ExecutionRouter:
                 engine = self._objective_engine()
                 gap_reply = engine.ensure_capabilities(
                     unknown, request, after=lambda ok, detail: (
-                        self._propose_agent_after_upgrade(request, spec, ok, detail)
+                        self._propose_agent_after_upgrade(
+                            request, spec, ok, detail,
+                            explicit_agent_type,
+                        )
                     )
                 )
             except Exception as exc:  # noqa: BLE001
@@ -2599,7 +2637,7 @@ class ExecutionRouter:
                     ),
                     data={"spec": spec, "gaps": unknown},
                     executor=lambda: self._approve_agent_with_upgrade(
-                        request, spec, unknown
+                        request, spec, unknown, explicit_agent_type
                     ),
                 )
         return self._approval.propose(
@@ -2607,7 +2645,9 @@ class ExecutionRouter:
             request=request,
             proposal=spec_text,
             data={"spec": spec},
-            executor=lambda: self._run_agent_pipeline(request, spec),
+            executor=lambda: self._run_agent_pipeline(
+                request, spec, explicit_agent_type,
+            ),
         )
 
     def _approve_agent_with_upgrade(
@@ -2622,7 +2662,7 @@ class ExecutionRouter:
             unknown,
             request,
             after=lambda ok, detail: self._propose_agent_after_upgrade(
-                request, spec, ok, detail
+                request, spec, ok, detail, explicit_agent_type
             ),
         )
 
@@ -2632,6 +2672,7 @@ class ExecutionRouter:
         spec: dict[str, Any],
         upgrade_ok: bool,
         detail: str,
+        explicit_agent_type: str | None = None,
     ) -> dict[str, Any]:
         """Arm the agent-creation gate once capabilities are installed."""
         capabilities, still_unknown = self._resolve_spec_capabilities(spec)
@@ -2654,10 +2695,16 @@ class ExecutionRouter:
             request=request,
             proposal=text,
             data={"spec": spec, "capabilities": cap_text},
-            executor=lambda: self._run_agent_pipeline(request, spec),
+            executor=lambda: self._run_agent_pipeline(
+                request, spec, explicit_agent_type,
+            ),
         )
 
-    def _build_agent_spec(self, request: str) -> tuple[str | None, dict[str, Any]]:
+    def _build_agent_spec(
+        self,
+        request: str,
+        explicit_agent_type: str | None = None,
+    ) -> tuple[str | None, dict[str, Any]]:
         try:
             from app.agents.capabilities import get_capability_registry
 
@@ -2682,9 +2729,8 @@ class ExecutionRouter:
         text = str(answer)
         data = _extract_json(text)
         spec = data if isinstance(data, dict) and data else {}
-        _type_match = _AGENT_TYPE_PATTERN.search(request)
-        if _type_match:
-            spec["agent_type"] = _type_match.group(1).lower()
+        if explicit_agent_type is not None:
+            spec["agent_type"] = explicit_agent_type
         if not spec:
             return (
                 "AGENT PROPOSAL\n\n"
@@ -2762,6 +2808,7 @@ class ExecutionRouter:
         self,
         request: str,
         spec: dict[str, Any],
+        explicit_agent_type: str | None = None,
     ) -> dict[str, Any]:
         """Create and register the approved agent."""
         from app.agents.factory import AgentFactory
@@ -2770,6 +2817,11 @@ class ExecutionRouter:
         if not name:
             words = [w for w in request.split() if w.isalnum()][:3]
             name = "_".join(words) or "assistant_agent"
+        # Final construction-boundary safeguard: explicit user intent
+        # wins over the AI-generated spec and any upstream value.
+        if explicit_agent_type is not None:
+            spec["agent_type"] = explicit_agent_type
+
         capabilities, _unknown = self._resolve_spec_capabilities(spec)
         parent_registration = None
         parent_name = (spec.get("parent") or "").strip()
