@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 from app.agents.factory import AgentFactory
-from app.agents.types import DomainAgent
+from app.agents.types import DomainAgent, DevelopmentAgent
 from app.assistant.intent_router import (
     ExecutionRouter, IntentClassification, IntentClassifier, ROUTE_AGENT,
     _detect_explicit_agent_type,
@@ -613,3 +613,320 @@ class TestDesktopCreationPath:
         agent = router._agent_instances["DevAgent"]
         assert isinstance(agent, DevelopmentAgent)
         assert agent.agent_type == "development"
+
+
+# ---------------------------------------------------------------------------
+# Type inference regression tests
+# ---------------------------------------------------------------------------
+
+
+class TestAgentTypeInference:
+    """Verify _run_agent_pipeline() correctly infers agent type
+    when explicit_agent_type is None."""
+
+    def _make_router(self, ai=None, registry=None):
+        """Helper: create an ExecutionRouter with fakes."""
+        ai = ai or _FakeAIManager()
+        registry = registry or _FakeAgentRegistry()
+        return ExecutionRouter(ai=ai, agents=registry, event_bus=None, graph=None)
+
+    # ---- A. Explicit domain type beats AI development type ----
+
+    def test_explicit_domain_beats_ai_development(self):
+        """A. When explicit_agent_type='domain', the agent MUST be
+        DomainAgent even if the spec says agent_type='development'."""
+        ai = _FakeAIManager()
+        registry = _FakeAgentRegistry()
+        router = self._make_router(ai=ai, registry=registry)
+        spec = {
+            "name": "ProjectStatusAgent",
+            "agent_type": "development",  # AI-generated, should be overridden
+            "description": "inspect the project",
+            "objective": "Inspect the current JARVIS project status.",
+            "capabilities": ["analytics", "knowledge", "memory"],
+        }
+        router._run_agent_pipeline("Inspect the project", spec, explicit_agent_type="domain")
+        agent = router._agent_instances["ProjectStatusAgent"]
+        assert isinstance(agent, DomainAgent), \
+            f"Expected DomainAgent but got {type(agent).__name__}"
+        assert agent.agent_type == "domain"
+
+    # ---- B. Project inspection objective with AI development type ----
+
+    def test_inspection_objective_with_ai_development_produces_domain(self):
+        """B. When the objective indicates project inspection and the
+        AI generated 'development', the pipeline must infer 'domain'."""
+        ai = _FakeAIManager()
+        registry = _FakeAgentRegistry()
+        router = self._make_router(ai=ai, registry=registry)
+        spec = {
+            "name": "ProjectStatusAgent",
+            "agent_type": "development",  # AI incorrectly generated this
+            "description": "inspect the project",
+            "objective": "Inspect the current JARVIS project status and identify the most important pending development issue.",
+            "capabilities": ["analytics", "knowledge", "memory"],
+        }
+        router._run_agent_pipeline("Inspect the project", spec, explicit_agent_type=None)
+        agent = router._agent_instances["ProjectStatusAgent"]
+        assert isinstance(agent, DomainAgent), \
+            f"Expected DomainAgent but got {type(agent).__name__}"
+        assert agent.agent_type == "domain"
+
+    # ---- C. Explicit development type remains DevelopmentAgent ----
+
+    def test_explicit_development_remains_development(self):
+        """C. When explicit_agent_type='development', the agent MUST be
+        DevelopmentAgent."""
+        from app.agents.types import DevelopmentAgent
+
+        ai = _FakeAIManager()
+        registry = _FakeAgentRegistry()
+        router = self._make_router(ai=ai, registry=registry)
+        spec = {
+            "name": "DevAgent",
+            "agent_type": "development",
+            "description": "develop",
+            "objective": "Develop the project.",
+            "capabilities": ["analytics"],
+        }
+        router._run_agent_pipeline("Develop the project", spec, explicit_agent_type="development")
+        agent = router._agent_instances["DevAgent"]
+        assert isinstance(agent, DevelopmentAgent), \
+            f"Expected DevelopmentAgent but got {type(agent).__name__}"
+        assert agent.agent_type == "development"
+
+    # ---- D. No explicit type + legitimate development objective ----
+
+    def test_legitimate_development_objective_remains_development(self):
+        """D. When the objective genuinely asks for development
+        (e.g. writing code), DevelopmentAgent should be created."""
+        from app.agents.types import DevelopmentAgent
+
+        ai = _FakeAIManager()
+        registry = _FakeAgentRegistry()
+        router = self._make_router(ai=ai, registry=registry)
+        spec = {
+            "name": "CodeGenerator",
+            "agent_type": "development",
+            "description": "write python code",
+            "objective": "Write a Python script that automates testing.",
+            "capabilities": ["analytics", "tool"],
+        }
+        router._run_agent_pipeline("Write a script", spec, explicit_agent_type=None)
+        agent = router._agent_instances["CodeGenerator"]
+        assert isinstance(agent, DevelopmentAgent), \
+            f"Expected DevelopmentAgent but got {type(agent).__name__}"
+        assert agent.agent_type == "development"
+
+    # ---- E. Explicit system/tool/composite behavior ----
+
+    def test_explicit_system_type_remains_system(self):
+        """E1. Explicit system type is preserved."""
+        from app.agents.types import SystemAgent
+
+        ai = _FakeAIManager()
+        registry = _FakeAgentRegistry()
+        router = self._make_router(ai=ai, registry=registry)
+        spec = {
+            "name": "SysAgent",
+            "agent_type": "system",
+            "description": "system ops",
+            "objective": "Manage system-level operations.",
+        }
+        router._run_agent_pipeline("System ops", spec, explicit_agent_type="system")
+        agent = router._agent_instances["SysAgent"]
+        assert isinstance(agent, SystemAgent), \
+            f"Expected SystemAgent but got {type(agent).__name__}"
+        assert agent.agent_type == "system"
+
+    def test_explicit_composite_type_remains_composite(self):
+        """E2. Explicit composite type is preserved."""
+        from app.agents.types import CompositeAgent
+
+        ai = _FakeAIManager()
+        registry = _FakeAgentRegistry()
+        router = self._make_router(ai=ai, registry=registry)
+        spec = {
+            "name": "CompAgent",
+            "agent_type": "composite",
+            "description": "composite agent",
+            "objective": "Coordinate sub-agents.",
+        }
+        router._run_agent_pipeline("Composite ops", spec, explicit_agent_type="composite")
+        agent = router._agent_instances["CompAgent"]
+        assert isinstance(agent, CompositeAgent), \
+            f"Expected CompositeAgent but got {type(agent).__name__}"
+        assert agent.agent_type == "composite"
+
+    # ---- F. Created DomainAgent receives execution dependencies ----
+
+    def test_domain_agent_receives_execution_dependencies(self):
+        """F. A DomainAgent created via _run_agent_pipeline with
+        inferred type must receive _ai, _objective, _capabilities_registry,
+        and _project_root."""
+        from app.agents.capabilities import get_capability_registry
+
+        ai = _FakeAIManager()
+        registry = _FakeAgentRegistry()
+        router = self._make_router(ai=ai, registry=registry)
+        spec = {
+            "name": "ProjectStatusAgent",
+            "agent_type": "development",  # AI-generated, should be overridden
+            "description": "inspect the project",
+            "objective": "Inspect the current JARVIS project status.",
+            "capabilities": ["analytics", "knowledge", "memory"],
+        }
+        router._run_agent_pipeline("Inspect the project", spec, explicit_agent_type=None)
+        agent = router._agent_instances["ProjectStatusAgent"]
+        assert isinstance(agent, DomainAgent)
+        assert agent._ai is ai
+        assert agent._objective == spec["objective"]
+        assert agent._capabilities_registry is not None
+        assert agent._project_root is not None
+
+    # ---- G. DomainAgent execute does NOT return the stub ----
+
+    def test_domain_agent_execute_not_stub(self):
+        """G. A DomainAgent created with inferred type must NOT return
+        {'status': 'ok', 'language': 'python', 'task': 'unknown'}."""
+        ai = _FakeAIManager()
+        registry = _FakeAgentRegistry()
+        router = self._make_router(ai=ai, registry=registry)
+        spec = {
+            "name": "ProjectStatusAgent",
+            "agent_type": "development",
+            "description": "inspect the project",
+            "objective": "Inspect the current JARVIS project status.",
+            "capabilities": ["analytics", "knowledge", "memory"],
+        }
+        router._run_agent_pipeline("Inspect the project", spec, explicit_agent_type=None)
+        agent = router._agent_instances["ProjectStatusAgent"]
+        result = agent.execute({"request": "Inspect the project"})
+        assert result != {"status": "ok", "language": "python", "task": "unknown"}, \
+            "DomainAgent must not return the DevelopmentAgent stub"
+        assert result["status"] == "ok"
+        assert "message" in result or "domain" in result
+
+    # ---- H. No explicit type + inspection keywords ----
+
+    def test_inspection_keywords_without_explicit_type_infer_domain(self):
+        """H. Objectives with inspection keywords infer 'domain'
+        even when capabilities are minimal."""
+        ai = _FakeAIManager()
+        registry = _FakeAgentRegistry()
+        router = self._make_router(ai=ai, registry=registry)
+        spec = {
+            "name": "StatusAgent",
+            "agent_type": "development",
+            "description": "check project status",
+            "objective": "Check the project status and report findings.",
+            "capabilities": ["memory"],
+        }
+        router._run_agent_pipeline("Check status", spec, explicit_agent_type=None)
+        agent = router._agent_instances["StatusAgent"]
+        assert isinstance(agent, DomainAgent), \
+            f"Expected DomainAgent but got {type(agent).__name__}"
+        assert agent.agent_type == "domain"
+
+    # ---- I. Development keywords do NOT trigger domain inference ----
+
+    def test_development_keywords_do_not_trigger_domain(self):
+        """I. Objectives with only development keywords do NOT infer
+        'domain' when the AI generates 'development'."""
+        from app.agents.types import DevelopmentAgent
+
+        ai = _FakeAIManager()
+        registry = _FakeAgentRegistry()
+        router = self._make_router(ai=ai, registry=registry)
+        spec = {
+            "name": "CodeAgent",
+            "agent_type": "development",
+            "description": "write code",
+            "objective": "Write a Python script to automate testing.",
+            "capabilities": ["tool", "analytics"],
+        }
+        router._run_agent_pipeline("Write script", spec, explicit_agent_type=None)
+        agent = router._agent_instances["CodeAgent"]
+        assert isinstance(agent, DevelopmentAgent), \
+            f"Expected DevelopmentAgent but got {type(agent).__name__}"
+        assert agent.agent_type == "development"
+
+
+# ---------------------------------------------------------------------------
+# IntentRouter type inference integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestIntentRouterTypeInference:
+    """Verify IntentClassifier preserves explicit type and
+    _resolve_agent_type works at the classification boundary."""
+
+    def test_classify_with_inspection_objective_no_explicit_type(self):
+        """Verify classify() works when user describes inspection
+        without 'domain agent' phrasing."""
+        classifier = IntentClassifier()
+        classification = classifier.classify(
+            "ProjectStatusAgent, execute your assigned objective now. Inspect the current JARVIS project status.",
+            agent_names=["ProjectStatusAgent"],
+        )
+        # The classification should have target set to the agent name
+        assert classification.target is not None
+        assert "ProjectStatusAgent" in classification.target
+        assert classification.route == ROUTE_AGENT
+
+    def test_resolve_agent_type_explicit_domain(self):
+        """Explicit domain type wins."""
+        from app.assistant.intent_router import ExecutionRouter
+
+        router = ExecutionRouter(ai=None, agents=None, event_bus=None, graph=None)
+        spec = {
+            "name": "TestAgent",
+            "agent_type": "development",
+            "objective": "Inspect the project.",
+            "capabilities": ["analytics"],
+        }
+        result = ExecutionRouter._resolve_agent_type(
+            "Inspect the project", spec, "domain",
+        )
+        assert result == "domain"
+
+    def test_resolve_agent_type_inferred_from_inspection(self):
+        """Project inspection objective infers domain."""
+        router = ExecutionRouter(ai=None, agents=None, event_bus=None, graph=None)
+        spec = {
+            "name": "TestAgent",
+            "agent_type": "development",
+            "objective": "Inspect the current JARVIS project status.",
+            "capabilities": ["analytics", "knowledge", "memory"],
+        }
+        result = ExecutionRouter._resolve_agent_type(
+            "Inspect the project", spec, None,
+        )
+        assert result == "domain"
+
+    def test_resolve_agent_type_legitimate_development(self):
+        """Legitimate development objectives remain development."""
+        router = ExecutionRouter(ai=None, agents=None, event_bus=None, graph=None)
+        spec = {
+            "name": "CodeAgent",
+            "agent_type": "development",
+            "objective": "Write a Python script to automate testing.",
+            "capabilities": ["tool", "analytics"],
+        }
+        result = ExecutionRouter._resolve_agent_type(
+            "Write script", spec, None,
+        )
+        assert result == "development"
+
+    def test_resolve_agent_type_no_signals_uses_spec(self):
+        """When no signals are present, fall back to spec agent_type."""
+        router = ExecutionRouter(ai=None, agents=None, event_bus=None, graph=None)
+        spec = {
+            "name": "TestAgent",
+            "agent_type": "composite",
+            "objective": "Coordinate sub-agents.",
+        }
+        result = ExecutionRouter._resolve_agent_type(
+            "Coordinate", spec, None,
+        )
+        assert result == "composite"

@@ -2804,6 +2804,91 @@ class ExecutionRouter:
                     tools.append(tool)
         return tools
 
+    # ------------------------------------------------------------------
+    # Agent type resolution
+    # ------------------------------------------------------------------
+
+    # Domain-indicating signals that a project inspection task requires
+    # DomainAgent rather than DevelopmentAgent. These are derived from the
+    # objective and capabilities, not from brittle keyword matching alone.
+    _DOMAIN_INDICATORS: frozenset[str] = frozenset({
+        "inspect", "read-only", "read only", "inspection",
+        "project status", "project inspection", "project root",
+        "analysis", "analyze", "examine", "assess", "status",
+        "find", "investigate", "report", "evaluate", "audit",
+    })
+
+    # Development-specific signals that indicate legitimate coding tasks
+    _DEVELOPMENT_INDICATORS: frozenset[str] = frozenset({
+        "write code", "writeprogram", "coding", "program",
+        "implement", "generate code", "code generation",
+        "build feature", "create script", "fix bug",
+        "refactor", "test", "debug", "deploy",
+    })
+
+    @staticmethod
+    def _resolve_agent_type(
+        request: str,
+        spec: dict[str, Any],
+        explicit_agent_type: str | None,
+    ) -> str:
+        """Resolve the correct agent type for agent creation.
+
+        Precedence:
+        1. Explicit user type wins always.
+        2. Domain-indicating objective/capabilities default to "domain".
+        3. Otherwise, use the spec's agent_type (AI-generated or default).
+
+        This prevents project inspection objectives from accidentally
+        becoming DevelopmentAgent when the AI generates "development"
+        because the objective mentions "development issues".
+        """
+        # 1. Explicit user intent always wins.
+        if explicit_agent_type is not None:
+            return explicit_agent_type
+
+        objective = (spec.get("objective") or "").lower()
+        capabilities = [
+            str(c).lower() if isinstance(c, str) else ""
+            for c in (spec.get("capabilities") or [])
+        ]
+
+        # 2. Check for domain-indicating signals.
+        has_domain_objective = any(
+            indicator in objective
+            for indicator in ExecutionRouter._DOMAIN_INDICATORS
+        )
+        has_domain_capability = any(
+            cap in ("knowledge", "memory", "filesystem",
+                    "analytics", "git", "web_research", "browser")
+            for cap in capabilities
+        )
+
+        # Check that this is NOT a legitimate development task.
+        has_development_objective = any(
+            indicator in objective
+            for indicator in ExecutionRouter._DEVELOPMENT_INDICATORS
+        )
+
+        # If the objective indicates project inspection and does NOT
+        # indicate legitimate development, default to domain.
+        if has_domain_objective and not has_development_objective:
+            return "domain"
+
+        # 3. Check capabilities: if domain capabilities are present
+        # without development capabilities, default to domain.
+        if has_domain_capability and not has_development_objective:
+            # Only default to domain if the objective also contains
+            # inspection/analysis language, not pure development tasks.
+            inspection_words = {"inspect", "read", "analyze",
+                                "examine", "report", "evaluate",
+                                "status", "find", "audit"}
+            if any(w in objective for w in inspection_words):
+                return "domain"
+
+        # 4. Fall back to the spec's agent_type or "domain".
+        return spec.get("agent_type", "domain")
+
     def _run_agent_pipeline(
         self,
         request: str,
@@ -2821,6 +2906,15 @@ class ExecutionRouter:
         # wins over the AI-generated spec and any upstream value.
         if explicit_agent_type is not None:
             spec["agent_type"] = explicit_agent_type
+
+        # Resolve the correct agent type when no explicit type was provided.
+        # This prevents project inspection objectives from becoming
+        # DevelopmentAgent when the AI generates "development" because
+        # the objective mentions "development issues".
+        resolved_agent_type = self._resolve_agent_type(
+            request, spec, explicit_agent_type,
+        )
+        spec["agent_type"] = resolved_agent_type
 
         capabilities, _unknown = self._resolve_spec_capabilities(spec)
         parent_registration = None
